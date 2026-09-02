@@ -1,8 +1,11 @@
 # NationState
 
-A turn-based nation building strategy game that runs entirely in the browser. Lead a young realm through 150 years of growth, diplomacy and war against five AI nations on a procedurally generated hex map.
+A turn-based nation building strategy game that runs entirely in the browser, rendered as a living 3D world. Lead a young realm through 150 years of growth, diplomacy and war against five AI nations on a procedurally generated hex map.
 
 ## Features
+
+- **A 3D world.** Extruded terrain hexes with forests, snow-capped peaks, coasts and animated water, drifting clouds with real shadows, national borders, banners and capital towers. Cities visibly grow as you build; walls rise; garrisons stand on the tile. Armies march across the map when you attack and battles flash where they happen.
+- **A polished HUD.** Glass panels, tweened resource counters, an in-game advisor that flags famine, unrest, idle scholars and easy conquests, live toasts for world events, a turn report, hover tooltips, keyboard shortcuts (Enter to end turn, 1-5 for tabs, H for home, Tab to hide the panel) and procedural sound with a mute toggle.
 
 - **Provinces and population.** Every hex has terrain, people, unrest, devastation and buildings. Population grows when fed and content, and it is both your tax base and your recruiting pool.
 - **Economy.** Four resources (gold, food, wood, iron), nine building types, a tax slider, food storage and famine. Stability is derived from unrest, war weariness and taxation, and it scales income, growth and troop morale.
@@ -53,5 +56,9 @@ src/engine/      pure game logic, no React
   events.ts      random events and their consequences
   turn.ts        end-of-turn processing and victory checks
   actions.ts     the reducer that applies player actions
-src/components/  React UI: hex map, panels and modals
+src/three/       react-three-fiber scene: tiles, borders, decor, effects, labels, camera
+src/ui/          HUD: top bar, advisor, toasts, legend, hover card, icons
+src/components/  side panels, modals and the new-game screen
+src/advisor.ts   contextual tips computed from the game state
+src/audio.ts     procedural sound effects (no audio files)
 ```

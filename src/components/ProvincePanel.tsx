@@ -17,6 +17,7 @@ interface Props {
   onSelect: (id: number) => void
   transferTarget: number | null
   setTransferTarget: (id: number | null) => void
+  onFocus?: (id: number) => void
 }
 
 function costText(c: { gold: number; wood: number; iron: number }) {
@@ -27,7 +28,7 @@ function costText(c: { gold: number; wood: number; iron: number }) {
   return parts.join(' ')
 }
 
-export function ProvincePanel({ state, province: p, dispatch, onSelect, transferTarget, setTransferTarget }: Props) {
+export function ProvincePanel({ state, province: p, dispatch, onSelect, transferTarget, setTransferTarget, onFocus }: Props) {
   const player = playerNation(state)
   const [unit, setUnit] = useState<UnitKey>('infantry')
   const [count, setCount] = useState(1)
@@ -74,7 +75,10 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
     <div>
       <div className="row between">
         <h2 style={{ margin: 0 }}>{p.isCapital ? '★ ' : ''}{p.name}</h2>
-        <span className="muted">{t.name}</span>
+        <span className="row">
+          <span className="muted">{t.name}</span>
+          {onFocus && <button className="btn small" onClick={() => onFocus(p.id)} title="Centre the camera here">Locate</button>}
+        </span>
       </div>
       <p className="muted small">
         {ownerName(state, p.ownerId)}

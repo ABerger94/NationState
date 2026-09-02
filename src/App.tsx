@@ -1,9 +1,18 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { reducer, attackTargets, type Action } from './engine/actions'
+import type { Army, GameState } from './engine/types'
 import { loadGame, saveGame } from './engine/persistence'
-import { playerNation } from './engine/helpers'
-import { Header } from './components/Header'
-import { HexMap, MapLegend } from './components/HexMap'
+import { playerNation, yearOf } from './engine/helpers'
+import { WorldMap, type Focus } from './three/WorldMap'
+import type { Fx } from './three/Effects'
+import { TopBar } from './ui/TopBar'
+import { Toasts, type Toast } from './ui/Toasts'
+import { Advisor } from './ui/Advisor'
+import { Legend } from './ui/Legend'
+import { Chevron } from './ui/icons'
+import { HoverCard } from './ui/HoverCard'
+import { getAdvice, type Advice } from './advisor'
+import { audio } from './audio'
 import { ProvincePanel } from './components/ProvincePanel'
 import { NationPanel } from './components/NationPanel'
 import { DiplomacyPanel } from './components/DiplomacyPanel'
@@ -22,43 +31,164 @@ export default function App() {
   const [state, dispatch] = useReducer(reducer, null, loadGame)
   const [selected, setSelected] = useState<number | null>(null)
   const [tab, setTab] = useState<Tab>('province')
+  const [panelOpen, setPanelOpen] = useState(true)
   const [battleId, setBattleId] = useState<number | null>(null)
   const [showReport, setShowReport] = useState(false)
   const [confirmNew, setConfirmNew] = useState(false)
   const [transferTarget, setTransferTarget] = useState<number | null>(null)
   const [dismissedGameOver, setDismissedGameOver] = useState(false)
+  const [focus, setFocus] = useState<Focus | null>(null)
+  const [fx, setFx] = useState<Fx[]>([])
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const [yearOverlay, setYearOverlay] = useState<number | null>(null)
+  const [muted, setMuted] = useState(audio.muted)
+  const [busy, setBusy] = useState(false)
+  const [hovered, setHovered] = useState<number | null>(null)
+
+  const fxId = useRef(1)
+  const toastId = useRef(1)
+  const pendingAttack = useRef<{ fxId: number; from: number; to: number; army: Army } | null>(null)
   const expectBattle = useRef(false)
-  const expectTurn = useRef(false)
-  const lastTurn = useRef(state?.turn ?? 0)
+  const prevState = useRef<GameState | null>(state)
 
   useEffect(() => { saveGame(state) }, [state])
 
+  const addFx = useCallback((f: Omit<Extract<Fx, { kind: 'march' }>, 'id' | 'start'> | Omit<Extract<Fx, { kind: 'clash' }>, 'id' | 'start'>) => {
+    const id = fxId.current++
+    setFx((list) => [...list, { ...f, id, start: performance.now() } as Fx])
+    return id
+  }, [])
+
+  const pushToasts = useCallback((items: Array<{ kind: Toast['kind']; text: string }>) => {
+    const created = items.map((t) => ({ ...t, id: toastId.current++ }))
+    setToasts((list) => [...list, ...created].slice(-6))
+    for (const t of created) setTimeout(() => setToasts((list) => list.filter((x) => x.id !== t.id)), 7000)
+  }, [])
+
+  const focusOn = useCallback((id: number) => {
+    setSelected(id)
+    setFocus({ id, nonce: Date.now() })
+  }, [])
+
+  // React to state transitions: new battles, new turns, game over.
   useEffect(() => {
+    const prev = prevState.current
+    prevState.current = state
     if (!state) return
-    if (selected === null || selected >= state.provinces.length) setSelected(playerNation(state).capitalId)
+    const player = playerNation(state)
+    const newWorld = !prev || prev.seed !== state.seed
+    if (newWorld) {
+      setSelected(player.capitalId)
+      setTab('province')
+      setDismissedGameOver(false)
+    } else if (selected === null || selected >= state.provinces.length) {
+      setSelected(player.capitalId)
+    }
+
     if (expectBattle.current) {
       expectBattle.current = false
+      setBusy(false)
       const last = state.battles[state.battles.length - 1]
-      if (last && last.turn === state.turn) setBattleId(last.id)
+      if (last && last.turn === state.turn && last.attackerId === player.id) {
+        const winnerColor = last.winner === 'attacker' ? player.color : (last.defenderId === null ? '#c8c8c8' : state.nations[last.defenderId].color)
+        addFx({ kind: 'clash', at: last.provinceId, color: winnerColor, duration: 1000 })
+        audio.play('clash')
+        setTimeout(() => setBattleId(last.id), 700)
+      }
     }
-    if (expectTurn.current && state.turn !== lastTurn.current) {
-      expectTurn.current = false
-      const prevTurn = state.turn - 1
-      const noteworthy = state.lastTurnBattles.length > 0 || state.log.some((e) => e.turn === prevTurn && e.kind !== 'info')
-      if (noteworthy) setShowReport(true)
-    }
-    lastTurn.current = state.turn
-  }, [state, selected])
 
-  const act = (a: Action) => {
-    if (a.type === 'ATTACK') expectBattle.current = true
+    if (prev && !newWorld && state.turn !== prev.turn) {
+      const prevTurn = state.turn - 1
+      const battles = state.battles.filter((b) => b.turn === prevTurn && !(b.attackerId === player.id && b.kind === 'battle'))
+      battles.forEach((b, i) => setTimeout(() => {
+        const color = b.winner === 'attacker'
+          ? (b.attackerId === null ? '#e0b341' : state.nations[b.attackerId].color)
+          : (b.defenderId === null ? '#c8c8c8' : state.nations[b.defenderId].color)
+        addFx({ kind: 'clash', at: b.provinceId, color, duration: 900 })
+        if (b.involvesPlayer) audio.play('clash')
+      }, 300 + i * 160))
+      const entries = state.log.filter((e) => e.turn === prevTurn && e.kind !== 'info')
+      pushToasts(entries.slice(-5).map((e) => ({ kind: e.kind, text: e.text })))
+      const noteworthy = state.lastTurnBattles.length > 0 || entries.length > 0
+      const prevPlayer = prev.nations.find((n) => n.isPlayer)!
+      if (player.wars.some((w) => !prevPlayer.wars.includes(w))) audio.play('war')
+      else if (prevPlayer.wars.some((w) => !player.wars.includes(w))) audio.play('peace')
+      if (state.gameOver && !prev.gameOver) audio.play(state.winner === player.id ? 'victory' : 'defeat')
+      setTimeout(() => {
+        setYearOverlay(null)
+        if (noteworthy && !state.gameOver) setShowReport(true)
+        else if (state.pendingEvent) audio.play('event')
+      }, 950)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state])
+
+  const onFxDone = useCallback((id: number) => {
+    setFx((list) => list.filter((f) => f.id !== id))
+    const pa = pendingAttack.current
+    if (pa && pa.fxId === id) {
+      pendingAttack.current = null
+      expectBattle.current = true
+      dispatch({ type: 'ATTACK', from: pa.from, to: pa.to, army: pa.army })
+    }
+  }, [])
+
+  const startAttack = useCallback((from: number, to: number, army: Army) => {
+    if (pendingAttack.current) return
+    audio.play('march')
+    setBusy(true)
+    const id = addFx({ kind: 'march', from, to, color: '#e0b341', duration: 1200 })
+    pendingAttack.current = { fxId: id, from, to, army }
+  }, [addFx])
+
+  const act = useCallback((a: Action) => {
+    switch (a.type) {
+      case 'ATTACK': startAttack(a.from, a.to, a.army); return
+      case 'BUILD': audio.play('build'); break
+      case 'RECRUIT': audio.play('recruit'); break
+      case 'TRADE': case 'SEND_GIFT': audio.play('coin'); break
+      case 'DECLARE_WAR': audio.play('war'); break
+      case 'ACCEPT_PEACE': audio.play('peace'); break
+      default: audio.play('click')
+    }
     dispatch(a)
-  }
+  }, [startAttack])
+
+  const endTurn = useCallback(() => {
+    if (!state || state.pendingEvent || state.gameOver || pendingAttack.current) return
+    audio.play('endTurn')
+    setTransferTarget(null)
+    setYearOverlay(yearOf(state) + 1)
+    dispatch({ type: 'END_TURN' })
+  }, [state])
 
   const targets = useMemo(() => (state && selected !== null ? attackTargets(state, selected) : []), [state, selected])
+  const advice = useMemo(() => (state ? getAdvice(state) : []), [state])
+
+  const anyModal = battleId !== null || showReport || confirmNew || !!state?.pendingEvent || (state?.gameOver && !dismissedGameOver)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+      if (e.key === 'Escape') {
+        if (battleId !== null) setBattleId(null)
+        else if (showReport) setShowReport(false)
+        else if (confirmNew) setConfirmNew(false)
+        return
+      }
+      if (anyModal) return
+      if (e.key === 'Enter') { e.preventDefault(); endTurn() }
+      else if (e.key >= '1' && e.key <= '5') { setTab(TABS[parseInt(e.key, 10) - 1].key); setPanelOpen(true) }
+      else if (e.key === 'h' && state) focusOn(playerNation(state).capitalId)
+      else if (e.key === 'Tab') { e.preventDefault(); setPanelOpen((o) => !o) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [anyModal, battleId, showReport, confirmNew, endTurn, focusOn, state])
 
   if (!state) {
-    return <NewGameScreen onStart={(o) => { setSelected(null); setDismissedGameOver(false); dispatch({ type: 'NEW_GAME', ...o }) }} />
+    return <NewGameScreen onStart={(o) => { audio.play('build'); dispatch({ type: 'NEW_GAME', ...o }) }} />
   }
 
   const player = playerNation(state)
@@ -67,49 +197,58 @@ export default function App() {
   const highlight = transferTarget !== null ? [transferTarget] : []
   const hasPeaceOffer = player.peaceOffersFrom.length > 0
 
-  const endTurn = () => {
-    expectTurn.current = true
-    setTransferTarget(null)
-    dispatch({ type: 'END_TURN' })
+  const onAdvice = (a: Advice) => {
+    if (a.provinceId !== undefined) focusOn(a.provinceId)
+    if (a.tab) { setTab(a.tab); setPanelOpen(true) }
   }
 
   return (
     <div className="app">
-      <Header state={state} onEndTurn={endTurn} onNewGame={() => setConfirmNew(true)} />
-      <div className="main">
-        <div className="map-wrap">
-          <HexMap state={state} selected={selected} onSelect={(id) => { setSelected(id); setTab('province') }} targets={targets} highlight={highlight} />
-          <MapLegend state={state} />
+      <WorldMap
+        state={state} selected={selected} targets={targets} highlight={highlight} focus={focus}
+        fx={fx} onFxDone={onFxDone} interactive onHover={setHovered}
+        onSelect={(id) => { setSelected(id); setTab('province'); audio.play('click') }}
+      />
+      {hovered !== null && hovered !== selected && !anyModal && <HoverCard state={state} province={state.provinces[hovered]} />}
+      <TopBar state={state} busy={busy} muted={muted} onEndTurn={endTurn} onNewGame={() => setConfirmNew(true)} onToggleMute={() => { const m = !muted; audio.setMuted(m); setMuted(m); if (!m) audio.play('click') }} />
+
+      <aside className={'side' + (panelOpen ? '' : ' closed')}>
+        <button className="side-handle" onClick={() => setPanelOpen(!panelOpen)} title="Toggle panel (Tab)"><Chevron className={panelOpen ? '' : 'flip'} /></button>
+        <div className="tabs">
+          {TABS.map((t, i) => (
+            <button key={t.key} className={'tab' + (tab === t.key ? ' active' : '')} onClick={() => setTab(t.key)} title={`${t.label} (${i + 1})`}>
+              {t.label}
+              {t.key === 'diplomacy' && hasPeaceOffer && <span className="dot" title="Peace offer pending" />}
+              {t.key === 'nation' && !player.research && <span className="dot" title="No research selected" />}
+            </button>
+          ))}
         </div>
-        <aside className="side">
-          <div className="tabs">
-            {TABS.map((t) => (
-              <button key={t.key} className={'tab' + (tab === t.key ? ' active' : '')} onClick={() => setTab(t.key)}>
-                {t.label}
-                {t.key === 'diplomacy' && hasPeaceOffer && <span className="dot" title="Peace offer pending" />}
-                {t.key === 'nation' && !player.research && <span className="dot" title="No research selected" />}
-              </button>
-            ))}
-          </div>
-          <div className="panel">
-            {tab === 'province' && <ProvincePanel state={state} province={province} dispatch={act} onSelect={setSelected} transferTarget={transferTarget} setTransferTarget={setTransferTarget} />}
-            {tab === 'nation' && <NationPanel state={state} dispatch={act} />}
-            {tab === 'diplomacy' && <DiplomacyPanel state={state} dispatch={act} />}
-            {tab === 'military' && <MilitaryPanel state={state} onSelect={(id) => { setSelected(id); setTab('province') }} onShowBattle={setBattleId} />}
-            {tab === 'log' && <LogPanel state={state} />}
-          </div>
-        </aside>
-      </div>
+        <div className="panel">
+          {tab === 'province' && <ProvincePanel state={state} province={province} dispatch={act} onSelect={focusOn} onFocus={focusOn} transferTarget={transferTarget} setTransferTarget={setTransferTarget} />}
+          {tab === 'nation' && <NationPanel state={state} dispatch={act} />}
+          {tab === 'diplomacy' && <DiplomacyPanel state={state} dispatch={act} />}
+          {tab === 'military' && <MilitaryPanel state={state} onSelect={(id) => { focusOn(id); setTab('province') }} onShowBattle={setBattleId} />}
+          {tab === 'log' && <LogPanel state={state} />}
+        </div>
+      </aside>
+
+      <Advisor advice={advice} onAction={onAdvice} />
+      <Legend state={state} onFocusNation={(id) => focusOn(state.nations[id].capitalId)} />
+      <Toasts toasts={toasts} onDismiss={(id) => setToasts((l) => l.filter((t) => t.id !== id))} />
+
+      {yearOverlay !== null && (
+        <div className="year-overlay" key={yearOverlay}><div className="year-text">Year {yearOverlay}</div><div className="year-sub">The seasons turn</div></div>
+      )}
 
       {state.gameOver && !dismissedGameOver && (
         <GameOverModal state={state} onContinue={() => setDismissedGameOver(true)} onNewGame={() => { dispatch({ type: 'QUIT' }); setDismissedGameOver(false) }} />
       )}
       {battle && <BattleModal report={battle} onClose={() => setBattleId(null)} />}
       {showReport && !battle && !state.gameOver && (
-        <TurnReportModal state={state} onClose={() => setShowReport(false)} onShowBattle={(id) => setBattleId(id)} />
+        <TurnReportModal state={state} onClose={() => { setShowReport(false); if (state.pendingEvent) audio.play('event') }} onShowBattle={(id) => setBattleId(id)} onFocus={focusOn} />
       )}
-      {state.pendingEvent && !showReport && !battle && !state.gameOver && (
-        <EventModal state={state} onChoose={(i) => dispatch({ type: 'RESOLVE_EVENT', choice: i })} />
+      {state.pendingEvent && !showReport && !battle && !state.gameOver && yearOverlay === null && (
+        <EventModal state={state} onChoose={(i) => { audio.play('click'); dispatch({ type: 'RESOLVE_EVENT', choice: i }) }} onFocus={focusOn} />
       )}
       {confirmNew && (
         <ConfirmModal text="Abandon the current game and start a new one? The current save will be erased." onYes={() => { setConfirmNew(false); dispatch({ type: 'QUIT' }) }} onNo={() => setConfirmNew(false)} />
