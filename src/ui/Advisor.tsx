@@ -3,7 +3,7 @@ import type { Advice } from '../advisor'
 import { Chevron, Lightbulb } from './icons'
 
 export function Advisor({ advice, onAction }: { advice: Advice[]; onAction: (a: Advice) => void }) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(() => (typeof window === 'undefined' ? true : window.innerHeight >= 820))
   if (!advice.length) return null
   const worst = advice[0].level
   return (

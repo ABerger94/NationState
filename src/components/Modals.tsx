@@ -158,3 +158,43 @@ export function ConfirmModal({ text, onYes, onNo }: { text: string; onYes: () =>
     </Modal>
   )
 }
+
+export function HelpModal({ onClose }: { onClose: () => void }) {
+  return (
+    <Modal onClose={onClose} wide>
+      <div className="eyebrow">Guide</div>
+      <h2>How to play NationState</h2>
+      <div className="help-grid">
+        <section>
+          <h3>The goal</h3>
+          <p>Hold 60% of the provinces, destroy every rival, or have the highest score when turn 150 ends. Score counts people, provinces, troops, technologies and gold.</p>
+          <h3>Each turn</h3>
+          <ol className="help-list">
+            <li>Read the Advisor and your Objectives.</li>
+            <li>Spend gold: build, recruit, or research.</li>
+            <li>Move or attack with armies that have not acted. The shield counter in the top bar shows how many can still strike; press N to cycle them.</li>
+            <li>Check diplomacy for offers and threats.</li>
+            <li>Press Enter to end the turn.</li>
+          </ol>
+          <h3>Controls</h3>
+          <ul className="help-list">
+            <li>Click a hex to select it. Click a red-ringed neighbour to line up an attack.</li>
+            <li>Left-drag pans, right-drag rotates, scroll zooms. Two fingers on touch.</li>
+            <li>Keys: Enter ends turn · 1-5 switch panels · H flies home · N next army · Tab hides the panel · Esc closes dialogs · ? opens this guide.</li>
+          </ul>
+        </section>
+        <section>
+          <h3>People and food</h3>
+          <p>Population grows when fed and content. It is your tax base and your recruiting pool. Every unit levies 100 people. Food is eaten every turn; run out and famine kills people and stokes unrest. Farms raise food and capacity, granaries raise storage.</p>
+          <h3>Gold and stability</h3>
+          <p>Taxes come from population, markets and the tax rate. Higher taxes raise unrest; unrest, war weariness and heavy taxes lower stability; stability scales income, growth and morale. Temples, luxuries and the Tolerance edict calm the realm.</p>
+          <h3>Armies and battle</h3>
+          <p>Militia are cheap defenders. Infantry hold lines. Archers volley first and love forests. Cavalry dominate plains and fail in hills. Siege engines breach walls. Battles run in rounds; a side routs when morale drops below 30. Read the odds before you attack, and leave a garrison behind.</p>
+          <h3>War and peace</h3>
+          <p>Wars need a shared border and a declaration. Declaring war angers everyone and drags the target's allies in. Enemies accept peace when they are losing or weary. Gifts raise relations; alliances need relations of 60 or more.</p>
+        </section>
+      </div>
+      <div className="row end"><button className="btn primary" onClick={onClose}>Close</button></div>
+    </Modal>
+  )
+}
