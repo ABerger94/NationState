@@ -23,9 +23,20 @@ import { NewGameScreen } from './components/NewGameScreen'
 import { BattleModal, ConfirmModal, EventModal, GameOverModal, HelpModal, TurnReportModal } from './components/Modals'
 import { Welcome } from './ui/Welcome'
 import { GoalsPanel } from './ui/GoalsPanel'
+import { MapModes } from './ui/MapModes'
+import type { MapMode } from './engine/yields'
 import { useIsMobile } from './ui/useIsMobile'
 
 const INTRO_KEY = 'nationstate-intro-seen'
+
+/** Scrolls the side panel so a section heading sits at the top, without touching any other scroll container. */
+export function scrollPanelTo(id: string) {
+  const el = document.getElementById(id)
+  const panel = el?.closest('.panel') as HTMLElement | null
+  if (!el || !panel) return
+  const top = el.getBoundingClientRect().top - panel.getBoundingClientRect().top + panel.scrollTop - 8
+  panel.scrollTo({ top, behavior: 'smooth' })
+}
 function introSeen(): boolean { try { return localStorage.getItem(INTRO_KEY) === '1' } catch { return false } }
 
 type Tab = 'province' | 'nation' | 'diplomacy' | 'military' | 'log' | 'goals'
@@ -55,6 +66,7 @@ export default function App() {
   const [muted, setMuted] = useState(audio.muted)
   const [busy, setBusy] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [mapMode, setMapMode] = useState<MapMode>('realm')
   const [showIntro, setShowIntro] = useState(() => !introSeen())
 
   const fxId = useRef(1)
@@ -88,7 +100,7 @@ export default function App() {
   const openSection = useCallback((section: 'build' | 'recruit' | 'attack' | 'move') => {
     setTab('province')
     setPanelOpen(true)
-    setTimeout(() => document.getElementById('sec-' + section)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+    setTimeout(() => scrollPanelTo('sec-' + section), 60)
   }, [])
 
   // React to state transitions: new battles, new turns, objectives, game over.
@@ -245,6 +257,7 @@ export default function App() {
       else if (e.key === '6' && isMobile) { setTab('goals'); setPanelOpen(true) }
       else if ((e.key === 'h' || e.key === 'H') && state) focusOn(playerNation(state).capitalId)
       else if (e.key === 'n' || e.key === 'N') nextArmy()
+      else if (e.key === 'm' || e.key === 'M') setMapMode((m) => { const keys: MapMode[] = ['realm', 'food', 'wood', 'iron', 'gold', 'unrest']; return keys[(keys.indexOf(m) + 1) % keys.length] })
       else if (e.key === 'Tab') { e.preventDefault(); setPanelOpen((o) => !o) }
     }
     window.addEventListener('keydown', onKey)
@@ -273,7 +286,7 @@ export default function App() {
       <WorldMap
         state={state} selected={selected} targets={targets} highlight={highlight} focus={focus}
         attackTarget={attackTarget}
-        fx={fx} onFxDone={onFxDone} interactive compact={isMobile}
+        fx={fx} onFxDone={onFxDone} interactive compact={isMobile} mapMode={mapMode}
         onSelect={onMapSelect}
       />
       <TopBar
@@ -285,6 +298,7 @@ export default function App() {
       />
 
       <div className="hud">
+      <MapModes mode={mapMode} onChange={(m) => { setMapMode(m); audio.play('click') }} />
       <aside className={'side' + (panelOpen ? '' : ' closed')}>
         <button className="side-handle" onClick={() => setPanelOpen(!panelOpen)} title="Toggle panel (Tab)"><Chevron className={panelOpen ? '' : 'flip'} /></button>
         <div className="tabs">
@@ -313,7 +327,7 @@ export default function App() {
               attackPreset={attackPreset} onDiplomacy={() => setTab('diplomacy')}
             />
           )}
-          {tab === 'nation' && <NationPanel state={state} dispatch={act} />}
+          {tab === 'nation' && <NationPanel state={state} dispatch={act} onFocus={focusOn} />}
           {tab === 'diplomacy' && <DiplomacyPanel state={state} dispatch={act} />}
           {tab === 'military' && <MilitaryPanel state={state} onSelect={(id) => { focusOn(id); setTab('province') }} onShowBattle={setBattleId} />}
           {tab === 'log' && <LogPanel state={state} />}

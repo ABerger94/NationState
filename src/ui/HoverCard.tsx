@@ -6,6 +6,8 @@ import { atWar } from '../engine/diplomacy'
 import { unrestColor } from '../components/common'
 
 /** Follows the mouse without re-rendering React on every move. */
+import { yieldPer1k } from '../engine/yields'
+
 export function HoverCard({ state, province: p }: { state: GameState; province: Province }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -30,6 +32,7 @@ export function HoverCard({ state, province: p }: { state: GameState; province: 
       <div className="hc-row"><span>Unrest</span><b style={{ color: unrestColor(p.unrest) }}>{Math.round(p.unrest)}</b></div>
       <div className="hc-row"><span>Garrison</span><b>{armySize(p.garrison)}</b></div>
       <div className="hc-army muted">{describeArmy(p.garrison)}{p.buildings.walls ? ` · walls ${p.buildings.walls}` : ''}</div>
+      {(() => { const y = yieldPer1k(state, p); return <div className="hc-yields"><span className="y-food">❦ {y.food.toFixed(1)}</span><span className="y-wood">▲ {y.wood.toFixed(1)}</span><span className="y-iron">◆ {y.iron.toFixed(1)}</span>{p.ownerId !== null && <span className="y-gold">● {y.gold.toFixed(1)}</span>}<span className="muted">per 1k</span></div> })()}
     </div>
   )
 }

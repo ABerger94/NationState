@@ -3,6 +3,9 @@ import { nationBudget } from './engine/economy'
 import { armyPower, armySize, ownedProvinces, playerNation } from './engine/helpers'
 import { attackPower, defensePower } from './engine/military'
 import { atWar } from './engine/diplomacy'
+import { bestBuildAcrossRealm, describeGain } from './engine/yields'
+import { BUILDINGS } from './engine/data'
+import { buildingCost } from './engine/economy'
 
 export type AdviceTab = 'province' | 'nation' | 'diplomacy' | 'military' | 'log'
 export interface Advice { id: string; level: 'danger' | 'warn' | 'info' | 'tip'; text: string; tab?: AdviceTab; provinceId?: number }
@@ -30,6 +33,9 @@ export function getAdvice(state: GameState): Advice[] {
   else if (r.gold > 450) out.push({ id: 'spend', level: 'tip', text: `${Math.floor(r.gold)} gold sits idle. Build, recruit, or buy goodwill with gifts.` })
   if (player.peaceOffersFrom.length) out.push({ id: 'peace', level: 'info', text: `${state.nations[player.peaceOffersFrom[0]].name} offers peace.`, tab: 'diplomacy' })
   if (player.warWeariness > 40) out.push({ id: 'weary', level: 'warn', text: `War weariness is ${Math.round(player.warWeariness)}. Stability suffers; consider making peace.`, tab: 'diplomacy' })
+
+  const best = bestBuildAcrossRealm(state, player)
+  if (best && r.gold >= 120) out.push({ id: 'best-build', level: 'tip', text: `Best investment: a ${BUILDINGS[best.suggestion.key].name} in ${state.provinces[best.provinceId].name} for ${buildingCost(player, best.suggestion.key).gold} gold adds ${describeGain(best.suggestion.gain.yields)} per turn.`, provinceId: best.provinceId, tab: 'province' })
 
   const restless = provs.filter((p) => p.unrest >= 65).sort((a, b) => b.unrest - a.unrest)[0]
   if (restless) out.push({ id: 'unrest', level: restless.unrest >= 85 ? 'danger' : 'warn', text: `Unrest in ${restless.name} is ${Math.round(restless.unrest)}. Garrison it, build a temple, or lower taxes.`, provinceId: restless.id, tab: 'province' })

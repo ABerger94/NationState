@@ -4,22 +4,22 @@ import type { GameState } from '../engine/types'
 import { armySize } from '../engine/helpers'
 import { tilePosition } from './hexmath'
 
-interface Props { state: GameState; heights: number[]; playerId: number }
+interface Props { state: GameState; heights: number[]; playerId: number; modeLabels?: string[] | null; modeColor?: string | null }
 
-export function Labels({ state, heights, playerId }: Props) {
+export function Labels({ state, heights, playerId, modeLabels = null, modeColor = null }: Props) {
   return (
     <group>
       {state.provinces.map((p) => {
         const [x, z] = tilePosition(p.col, p.row)
         const owner = p.ownerId === null ? null : state.nations[p.ownerId]
         const units = armySize(p.garrison)
-        const cls = 'badge' + (p.ownerId === playerId ? ' mine' : owner ? '' : ' free')
+        const cls = 'badge' + (p.ownerId === playerId ? ' mine' : owner ? '' : ' free') + (modeColor ? ' mode mode-' + modeColor : '')
         return (
           <Html key={p.id} transform sprite position={[x, heights[p.id] + 0.95, z]} scale={0.34} wrapperClass="label-wrap" zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
             <div className="label">
               <div className={cls} style={p.ownerId === playerId ? { borderColor: '#ffffff', background: owner!.color } : { borderColor: owner?.color ?? '#6b6b6b' }}>
                 {p.isCapital && <span className="star">★</span>}
-                <span className="units">{units}</span>
+                <span className="units">{modeLabels ? (modeLabels[p.id] || '·') : units}</span>
               </div>
               <div className="badge-name">{p.name}</div>
             </div>

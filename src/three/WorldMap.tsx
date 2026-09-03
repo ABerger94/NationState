@@ -9,6 +9,7 @@ import { StaticDecor, TileProps } from './Decor'
 import { Effects, type Fx } from './Effects'
 import { LabelLOD, Labels } from './Labels'
 import { MAP_D, MAP_W, tileHeight, tilePosition } from './hexmath'
+import { mapModeTile, type MapMode } from '../engine/yields'
 
 export interface Focus { id: number; nonce: number }
 
@@ -28,6 +29,7 @@ interface Props {
   showLabels?: boolean
   /** Phone layout: start close to the player's capital instead of framing the whole map. */
   compact?: boolean
+  mapMode?: MapMode
 }
 
 const skyMaterial = new THREE.ShaderMaterial({
@@ -172,7 +174,7 @@ function CameraRig({ focus, autoRotate, interactive, initialTarget }: { focus: F
 
 const focusPositions = new Map<number, THREE.Vector3>()
 
-export function WorldMap({ state, selected, targets, highlight, attackTarget = null, focus, fx, onFxDone, onSelect, onHover, interactive, autoRotate = false, showLabels = true, compact = false }: Props) {
+export function WorldMap({ state, selected, targets, highlight, attackTarget = null, focus, fx, onFxDone, onSelect, onHover, interactive, autoRotate = false, showLabels = true, compact = false, mapMode = 'realm' }: Props) {
   const [hovered, setHoveredState] = useState<number | null>(null)
   const setHovered = useCallback((id: number | null) => { setHoveredState(id); onHover?.(id) }, [onHover])
   const initialTarget = useMemo<[number, number, number]>(() => {
@@ -192,6 +194,7 @@ export function WorldMap({ state, selected, targets, highlight, attackTarget = n
     return [x, heights[i], z] as [number, number, number]
   }), [state.provinces, heights])
   const playerId = state.nations.findIndex((n) => n.isPlayer)
+  const modeTiles = useMemo(() => state.provinces.map((p) => mapModeTile(state, p, mapMode)), [state, mapMode])
 
   return (
     <div className="scene">
@@ -219,6 +222,7 @@ export function WorldMap({ state, selected, targets, highlight, attackTarget = n
               key={p.id} p={p} state={state} height={heights[p.id]}
               selected={selected === p.id} hovered={hovered === p.id}
               target={targets.includes(p.id)} highlight={highlight.includes(p.id)} armed={attackTarget === p.id}
+              modeColor={modeTiles[p.id]?.color ?? null}
               interactive={interactive} onSelect={onSelect} onHover={setHovered}
             />
           ))}
@@ -226,7 +230,7 @@ export function WorldMap({ state, selected, targets, highlight, attackTarget = n
         <Borders state={state} heights={heights} />
         <StaticDecor state={state} heights={heights} />
         {state.provinces.map((p) => <TileProps key={p.id} p={p} state={state} top={heights[p.id]} />)}
-        {showLabels && <Labels state={state} heights={heights} playerId={playerId} />}
+        {showLabels && <Labels state={state} heights={heights} playerId={playerId} modeLabels={mapMode === 'realm' ? null : modeTiles.map((m) => m?.label ?? '')} modeColor={mapMode === 'realm' ? null : mapMode} />}
         <Effects fx={fx} positions={positions} onDone={onFxDone} />
         <CameraRig focus={focus} autoRotate={autoRotate} interactive={interactive} initialTarget={initialTarget} />
         {showLabels && <LabelLOD />}

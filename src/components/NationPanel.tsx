@@ -4,12 +4,14 @@ import { CONQUEST_SHARE, MAX_TURNS, PERSONALITIES, POLICIES, TECHS, TECH_ORDER, 
 import { armyPower, armySize, fmt, fmtSigned, nationArmy, ownedProvinces, playerNation, totalPopulation } from '../engine/helpers'
 import { nationBudget, nationScore } from '../engine/economy'
 import { availableTechs } from '../engine/ai'
+import { provinceOutput } from '../engine/economy'
+import { suggestBuilding } from '../engine/yields'
 import { useState } from 'react'
 import { Bar, stabilityColor } from './common'
 
-interface Props { state: GameState; dispatch: (a: Action) => void }
+interface Props { state: GameState; dispatch: (a: Action) => void; onFocus?: (id: number) => void }
 
-export function NationPanel({ state, dispatch }: Props) {
+export function NationPanel({ state, dispatch, onFocus }: Props) {
   const player = playerNation(state)
   const budget = nationBudget(state, player)
   const [tradeAmount, setTradeAmount] = useState(100)
@@ -58,6 +60,33 @@ export function NationPanel({ state, dispatch }: Props) {
           </div>
         )
       })}
+
+      <h3>Ledger</h3>
+      <p className="muted small">Output of every province per turn. Tap a row to go there. The last column is the best next production build.</p>
+      <div className="ledger-wrap">
+        <table className="tbl ledger">
+          <thead><tr><th>Province</th><th className="num">People</th><th className="num">Food</th><th className="num">Wood</th><th className="num">Iron</th><th className="num">Gold</th><th className="num">Sci</th><th>Next</th></tr></thead>
+          <tbody>
+            {ownedProvinces(state, player.id).sort((a, b) => b.population - a.population).map((p) => {
+              const o = provinceOutput(state, p)
+              const s = suggestBuilding(state, player, p)
+              return (
+                <tr key={p.id} className="clickable" onClick={() => onFocus?.(p.id)}>
+                  <td>{p.isCapital ? '★ ' : ''}{p.name}</td>
+                  <td className="num">{fmt(p.population)}</td>
+                  <td className="num">{o.food.toFixed(1)}</td>
+                  <td className="num">{o.wood.toFixed(1)}</td>
+                  <td className="num">{o.iron.toFixed(1)}</td>
+                  <td className="num">{o.gold.toFixed(1)}</td>
+                  <td className="num">{o.science}</td>
+                  <td className="small muted">{s ? ({ farm: 'Farm', lumberMill: 'Mill', mine: 'Mine', market: 'Market', university: 'Univ.' } as Record<string, string>)[s.key] ?? s.key : '—'}</td>
+                </tr>
+              )
+            })}
+            <tr className="total"><td><b>Total</b></td><td className="num"><b>{fmt(totalPopulation(state, player.id))}</b></td><td className="num"><b>{budget.income.food.toFixed(1)}</b></td><td className="num"><b>{budget.income.wood.toFixed(1)}</b></td><td className="num"><b>{budget.income.iron.toFixed(1)}</b></td><td className="num"><b>{budget.income.gold.toFixed(1)}</b></td><td className="num"><b>{budget.science}</b></td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
 
       <h3>Treasury</h3>
       <table className="tbl">
