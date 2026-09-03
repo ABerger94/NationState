@@ -26,6 +26,8 @@ interface Props {
   interactive: boolean
   autoRotate?: boolean
   showLabels?: boolean
+  /** Phone layout: start close to the player's capital instead of framing the whole map. */
+  compact?: boolean
 }
 
 const skyMaterial = new THREE.ShaderMaterial({
@@ -170,10 +172,19 @@ function CameraRig({ focus, autoRotate, interactive, initialTarget }: { focus: F
 
 const focusPositions = new Map<number, THREE.Vector3>()
 
-export function WorldMap({ state, selected, targets, highlight, attackTarget = null, focus, fx, onFxDone, onSelect, onHover, interactive, autoRotate = false, showLabels = true }: Props) {
+export function WorldMap({ state, selected, targets, highlight, attackTarget = null, focus, fx, onFxDone, onSelect, onHover, interactive, autoRotate = false, showLabels = true, compact = false }: Props) {
   const [hovered, setHoveredState] = useState<number | null>(null)
   const setHovered = useCallback((id: number | null) => { setHoveredState(id); onHover?.(id) }, [onHover])
-  const initialTarget = useMemo<[number, number, number]>(() => (interactive ? [2.2, 0, 0.6] : [0, 0, 0]), [interactive])
+  const initialTarget = useMemo<[number, number, number]>(() => {
+    if (compact) {
+      const cap = state.provinces[state.nations.find((n) => n.isPlayer)?.capitalId ?? 0]
+      const [x, z] = tilePosition(cap.col, cap.row)
+      return [x, 0, z]
+    }
+    return interactive ? [2.2, 0, 0.6] : [0, 0, 0]
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interactive, compact, state.seed])
+  const initialCamera = useMemo<[number, number, number]>(() => compact ? [initialTarget[0], 11.5, initialTarget[2] + 6] : interactive ? [2.2, 15.6, 14.4] : [0, 11, 12], [compact, interactive, initialTarget])
   const heights = useMemo(() => state.provinces.map((p) => tileHeight(p.terrain, state.seed, p.id)), [state.seed, state.provinces.length])
   const positions = useMemo(() => state.provinces.map((p, i) => {
     const [x, z] = tilePosition(p.col, p.row)
@@ -187,7 +198,7 @@ export function WorldMap({ state, selected, targets, highlight, attackTarget = n
       <Canvas
         shadows
         dpr={[1, 1.75]}
-        camera={{ position: interactive ? [2.2, 15.6, 14.4] : [0, 11, 12], fov: 42, near: 0.1, far: 300 }}
+        camera={{ position: initialCamera, fov: 42, near: 0.1, far: 300 }}
         gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
         onCreated={({ gl }) => { gl.shadowMap.type = THREE.PCFSoftShadowMap }}
       >

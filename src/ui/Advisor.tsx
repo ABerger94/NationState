@@ -2,8 +2,9 @@ import { useState } from 'react'
 import type { Advice } from '../advisor'
 import { Chevron, Lightbulb } from './icons'
 
-export function Advisor({ advice, onAction }: { advice: Advice[]; onAction: (a: Advice) => void }) {
-  const [open, setOpen] = useState(() => (typeof window === 'undefined' ? true : window.innerHeight >= 820))
+export function Advisor({ advice, onAction, forceOpen = false }: { advice: Advice[]; onAction: (a: Advice) => void; forceOpen?: boolean }) {
+  const [openState, setOpen] = useState(() => (typeof window === 'undefined' ? true : window.innerHeight >= 820))
+  const open = forceOpen || openState
   if (!advice.length) return null
   const worst = advice[0].level
   return (

@@ -1,11 +1,11 @@
 import type { GameState } from '../engine/types'
 import { ownedProvinces } from '../engine/helpers'
 
-export function Legend({ state, onFocusNation }: { state: GameState; onFocusNation: (id: number) => void }) {
+export function Legend({ state, onFocusNation, inline = false }: { state: GameState; onFocusNation: (id: number) => void; inline?: boolean }) {
   const player = state.nations.find((n) => n.isPlayer)!
   const rows = [player, ...state.nations.filter((n) => n.alive && !n.isPlayer)]
   return (
-    <div className="legend-3d">
+    <div className={"legend-3d" + (inline ? " inline" : "")}>
       {rows.map((n) => {
         const war = player.wars.includes(n.id)
         const ally = player.allies.includes(n.id)

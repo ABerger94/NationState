@@ -1,3 +1,13 @@
+import { isMobileNow } from './useIsMobile'
+
+const MOBILE_STEPS = [
+  { glyph: '⬢', title: 'The map', text: 'Your realm is blue with a beacon over the capital. Tap a hex to select it. Drag with one finger to pan, pinch to zoom, two fingers to rotate.' },
+  { glyph: '⚑', title: 'Action bar', text: 'Appears above the tabs when a province is selected. Build, recruit, move, or attack. Tap a red-ringed neighbour to line up an attack.' },
+  { glyph: '☰', title: 'Tabs', text: 'Along the bottom. Tap one to open it; tap it again to hide the panel and see the map. Goals holds your objectives and advisor.' },
+  { glyph: '◈', title: 'Objectives', text: 'In the Goals tab. Three goals at a time, each paying gold. Follow them and you will learn the game as you go.' },
+  { glyph: '↵', title: 'End turn', text: 'Top right. The world moves, then you get a short report of what happened to you.' },
+]
+
 const STEPS = [
   { glyph: '◈', title: 'Objectives and Advisor', text: 'Top left. Your next three goals, each paying gold, and an advisor who warns you before things go wrong.' },
   { glyph: '⬢', title: 'The map', text: 'Your realm is blue with a beacon over the capital. Click any hex to select it. Left-drag pans, right-drag rotates, scroll zooms.' },
@@ -7,13 +17,14 @@ const STEPS = [
 ]
 
 export function Welcome({ onClose }: { onClose: () => void }) {
+  const steps = isMobileNow() ? MOBILE_STEPS : STEPS
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal welcome" onClick={(e) => e.stopPropagation()}>
         <div className="eyebrow">Welcome, ruler</div>
         <h2>Five things to know</h2>
         <ol className="welcome-steps">
-          {STEPS.map((s) => (
+          {steps.map((s) => (
             <li key={s.title}>
               <span className="welcome-glyph">{s.glyph}</span>
               <div><b>{s.title}</b><div className="muted">{s.text}</div></div>
