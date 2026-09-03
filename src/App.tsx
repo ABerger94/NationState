@@ -22,23 +22,27 @@ import { LogPanel } from './components/LogPanel'
 import { NewGameScreen } from './components/NewGameScreen'
 import { BattleModal, ConfirmModal, EventModal, GameOverModal, HelpModal, TurnReportModal } from './components/Modals'
 import { Welcome } from './ui/Welcome'
+import { GoalsPanel } from './ui/GoalsPanel'
+import { useIsMobile } from './ui/useIsMobile'
 
 const INTRO_KEY = 'nationstate-intro-seen'
 function introSeen(): boolean { try { return localStorage.getItem(INTRO_KEY) === '1' } catch { return false } }
 
-type Tab = 'province' | 'nation' | 'diplomacy' | 'military' | 'log'
-const TABS: Array<{ key: Tab; label: string }> = [
-  { key: 'province', label: 'Province' }, { key: 'nation', label: 'Nation' }, { key: 'diplomacy', label: 'Diplomacy' },
-  { key: 'military', label: 'Military' }, { key: 'log', label: 'Chronicle' },
+type Tab = 'province' | 'nation' | 'diplomacy' | 'military' | 'log' | 'goals'
+const TABS: Array<{ key: Tab; label: string; glyph: string }> = [
+  { key: 'province', label: 'Province', glyph: '⬢' }, { key: 'nation', label: 'Nation', glyph: '♛' }, { key: 'diplomacy', label: 'Diplomacy', glyph: '⚖' },
+  { key: 'military', label: 'Military', glyph: '⚔' }, { key: 'log', label: 'Chronicle', glyph: '✎' },
 ]
+const GOALS_TAB = { key: 'goals' as Tab, label: 'Goals', glyph: '◈' }
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, null, loadGame)
   const [selected, setSelected] = useState<number | null>(null)
   const [attackTarget, setAttackTarget] = useState<number | null>(null)
   const [attackPreset, setAttackPreset] = useState<number | null>(null)
+  const isMobile = useIsMobile()
   const [tab, setTab] = useState<Tab>('province')
-  const [panelOpen, setPanelOpen] = useState(true)
+  const [panelOpen, setPanelOpen] = useState(() => !(typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches))
   const [battleId, setBattleId] = useState<number | null>(null)
   const [showReport, setShowReport] = useState(false)
   const [confirmNew, setConfirmNew] = useState(false)
@@ -78,7 +82,8 @@ export default function App() {
     setSelected(id)
     setAttackTarget(null)
     setFocus({ id, nonce: Date.now() })
-  }, [])
+    if (isMobile) setPanelOpen(false)
+  }, [isMobile])
 
   const openSection = useCallback((section: 'build' | 'recruit' | 'attack' | 'move') => {
     setTab('province')
@@ -98,7 +103,8 @@ export default function App() {
       setAttackTarget(null)
       setTab('province')
       setDismissedGameOver(false)
-      setFocus(null)
+      setFocus(isMobile ? { id: player.capitalId, nonce: Date.now() } : null)
+      if (isMobile) setPanelOpen(false)
     } else if (selected === null || selected >= state.provinces.length) {
       setSelected(player.capitalId)
     }
@@ -214,8 +220,9 @@ export default function App() {
     setSelected(id)
     setAttackTarget(null)
     setTab('province')
+    if (isMobile) setPanelOpen(false)
     audio.play('click')
-  }, [state, selected, targets])
+  }, [state, selected, targets, isMobile])
 
   const anyModal = battleId !== null || showReport || confirmNew || showHelp || showIntro || !!state?.pendingEvent || (state?.gameOver && !dismissedGameOver)
 
@@ -235,13 +242,14 @@ export default function App() {
       if (anyModal) return
       if (e.key === 'Enter') { e.preventDefault(); endTurn() }
       else if (e.key >= '1' && e.key <= '5') { setTab(TABS[parseInt(e.key, 10) - 1].key); setPanelOpen(true) }
+      else if (e.key === '6' && isMobile) { setTab('goals'); setPanelOpen(true) }
       else if ((e.key === 'h' || e.key === 'H') && state) focusOn(playerNation(state).capitalId)
       else if (e.key === 'n' || e.key === 'N') nextArmy()
       else if (e.key === 'Tab') { e.preventDefault(); setPanelOpen((o) => !o) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [anyModal, battleId, showReport, confirmNew, showHelp, attackTarget, endTurn, focusOn, nextArmy, state])
+  }, [anyModal, battleId, showReport, confirmNew, showHelp, attackTarget, endTurn, focusOn, nextArmy, state, isMobile])
 
   if (!state) {
     return <NewGameScreen onStart={(o) => { audio.play('build'); dispatch({ type: 'NEW_GAME', ...o }) }} />
@@ -257,6 +265,7 @@ export default function App() {
   const onAdvice = (a: Advice) => {
     if (a.provinceId !== undefined) focusOn(a.provinceId)
     if (a.tab) { setTab(a.tab); setPanelOpen(true) }
+    else if (isMobile) setPanelOpen(false)
   }
 
   return (
@@ -264,7 +273,7 @@ export default function App() {
       <WorldMap
         state={state} selected={selected} targets={targets} highlight={highlight} focus={focus}
         attackTarget={attackTarget}
-        fx={fx} onFxDone={onFxDone} interactive
+        fx={fx} onFxDone={onFxDone} interactive compact={isMobile}
         onSelect={onMapSelect}
       />
       <TopBar
@@ -279,11 +288,20 @@ export default function App() {
       <aside className={'side' + (panelOpen ? '' : ' closed')}>
         <button className="side-handle" onClick={() => setPanelOpen(!panelOpen)} title="Toggle panel (Tab)"><Chevron className={panelOpen ? '' : 'flip'} /></button>
         <div className="tabs">
-          {TABS.map((t, i) => (
-            <button key={t.key} className={'tab' + (tab === t.key ? ' active' : '')} onClick={() => setTab(t.key)} title={`${t.label} (${i + 1})`}>
-              {t.label}
+          {(isMobile ? [...TABS, GOALS_TAB] : TABS).map((t, i) => (
+            <button
+              key={t.key} className={'tab' + (tab === t.key ? ' active' : '')} title={`${t.label} (${i + 1})`}
+              onClick={() => {
+                if (isMobile && panelOpen && tab === t.key) { setPanelOpen(false); return }
+                setTab(t.key)
+                setPanelOpen(true)
+              }}
+            >
+              <span className="tab-glyph" aria-hidden>{t.glyph}</span>
+              <span className="tab-label">{t.label}</span>
               {t.key === 'diplomacy' && hasPeaceOffer && <span className="dot" title="Peace offer pending" />}
               {t.key === 'nation' && (!player.research || player.policies.economy === null) && <span className="dot" title="Research or edicts need attention" />}
+              {t.key === 'goals' && warnings > 0 && <span className="dot" title="Advisor warnings" />}
             </button>
           ))}
         </div>
@@ -299,14 +317,19 @@ export default function App() {
           {tab === 'diplomacy' && <DiplomacyPanel state={state} dispatch={act} />}
           {tab === 'military' && <MilitaryPanel state={state} onSelect={(id) => { focusOn(id); setTab('province') }} onShowBattle={setBattleId} />}
           {tab === 'log' && <LogPanel state={state} />}
+          {tab === 'goals' && <GoalsPanel state={state} advice={advice} onAdvice={onAdvice} onFocusNation={(id) => { focusOn(state.nations[id].capitalId); setPanelOpen(false) }} />}
         </div>
       </aside>
 
-      <div className="hud-left">
-        <Objectives state={state} />
-        <Advisor advice={advice} onAction={onAdvice} />
-      </div>
-      <Legend state={state} onFocusNation={(id) => focusOn(state.nations[id].capitalId)} />
+      {!isMobile && (
+        <>
+          <div className="hud-left">
+            <Objectives state={state} />
+            <Advisor advice={advice} onAction={onAdvice} />
+          </div>
+          <Legend state={state} onFocusNation={(id) => focusOn(state.nations[id].capitalId)} />
+        </>
+      )}
       <QuickBar
         state={state} selected={selected} attackTarget={attackTarget}
         onAttack={(from, to, army) => startAttack(from, to, army)}

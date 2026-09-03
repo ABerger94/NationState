@@ -17,7 +17,8 @@ export function getAdvice(state: GameState): Advice[] {
   const budget = nationBudget(state, player)
   const r = player.resources
 
-  if (state.turn <= 2) out.push({ id: 'welcome', level: 'tip', text: 'Click a province to inspect it. Left-drag pans the map, right-drag rotates, scroll zooms. Press Enter to end the turn.' })
+  const touch = typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches
+  if (state.turn <= 2) out.push({ id: 'welcome', level: 'tip', text: touch ? 'Tap a province to inspect it. Drag to pan, pinch to zoom, two fingers to rotate. Tap the action bar to build, recruit or attack.' : 'Click a province to inspect it. Left-drag pans the map, right-drag rotates, scroll zooms. Press Enter to end the turn.' })
   if (!player.research) out.push({ id: 'research', level: 'warn', text: 'No technology is being researched. Your scholars are idle.', tab: 'nation' })
   if (budget.net.food < 0) {
     const turns = Math.floor(r.food / -budget.net.food)
