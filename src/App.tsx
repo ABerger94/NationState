@@ -20,7 +20,11 @@ import { DiplomacyPanel } from './components/DiplomacyPanel'
 import { MilitaryPanel } from './components/MilitaryPanel'
 import { LogPanel } from './components/LogPanel'
 import { NewGameScreen } from './components/NewGameScreen'
-import { BattleModal, ConfirmModal, EventModal, GameOverModal, TurnReportModal } from './components/Modals'
+import { BattleModal, ConfirmModal, EventModal, GameOverModal, HelpModal, TurnReportModal } from './components/Modals'
+import { Welcome } from './ui/Welcome'
+
+const INTRO_KEY = 'nationstate-intro-seen'
+function introSeen(): boolean { try { return localStorage.getItem(INTRO_KEY) === '1' } catch { return false } }
 
 type Tab = 'province' | 'nation' | 'diplomacy' | 'military' | 'log'
 const TABS: Array<{ key: Tab; label: string }> = [
@@ -46,6 +50,8 @@ export default function App() {
   const [yearOverlay, setYearOverlay] = useState<number | null>(null)
   const [muted, setMuted] = useState(audio.muted)
   const [busy, setBusy] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+  const [showIntro, setShowIntro] = useState(() => !introSeen())
 
   const fxId = useRef(1)
   const toastId = useRef(1)
@@ -211,19 +217,21 @@ export default function App() {
     audio.play('click')
   }, [state, selected, targets])
 
-  const anyModal = battleId !== null || showReport || confirmNew || !!state?.pendingEvent || (state?.gameOver && !dismissedGameOver)
+  const anyModal = battleId !== null || showReport || confirmNew || showHelp || showIntro || !!state?.pendingEvent || (state?.gameOver && !dismissedGameOver)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
       if (e.key === 'Escape') {
-        if (battleId !== null) setBattleId(null)
+        if (showHelp) setShowHelp(false)
+        else if (battleId !== null) setBattleId(null)
         else if (showReport) setShowReport(false)
         else if (confirmNew) setConfirmNew(false)
         else if (attackTarget !== null) setAttackTarget(null)
         return
       }
+      if (e.key === '?') { setShowHelp((h) => !h); return }
       if (anyModal) return
       if (e.key === 'Enter') { e.preventDefault(); endTurn() }
       else if (e.key >= '1' && e.key <= '5') { setTab(TABS[parseInt(e.key, 10) - 1].key); setPanelOpen(true) }
@@ -233,7 +241,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [anyModal, battleId, showReport, confirmNew, attackTarget, endTurn, focusOn, nextArmy, state])
+  }, [anyModal, battleId, showReport, confirmNew, showHelp, attackTarget, endTurn, focusOn, nextArmy, state])
 
   if (!state) {
     return <NewGameScreen onStart={(o) => { audio.play('build'); dispatch({ type: 'NEW_GAME', ...o }) }} />
@@ -264,8 +272,10 @@ export default function App() {
         onEndTurn={endTurn} onNewGame={() => setConfirmNew(true)}
         onToggleMute={() => { const m = !muted; audio.setMuted(m); setMuted(m); if (!m) audio.play('click') }}
         onHome={() => focusOn(player.capitalId)} onNextArmy={nextArmy}
+        onHelp={() => setShowHelp(true)} onIntro={() => setShowIntro(true)}
       />
 
+      <div className="hud">
       <aside className={'side' + (panelOpen ? '' : ' closed')}>
         <button className="side-handle" onClick={() => setPanelOpen(!panelOpen)} title="Toggle panel (Tab)"><Chevron className={panelOpen ? '' : 'flip'} /></button>
         <div className="tabs">
@@ -292,8 +302,8 @@ export default function App() {
         </div>
       </aside>
 
-      <Objectives state={state} />
       <div className="hud-left">
+        <Objectives state={state} />
         <Advisor advice={advice} onAction={onAdvice} />
       </div>
       <Legend state={state} onFocusNation={(id) => focusOn(state.nations[id].capitalId)} />
@@ -308,7 +318,10 @@ export default function App() {
         onPickSource={(target) => { const src = bestSourceFor(state, target); if (src !== null) { setSelected(src); setAttackTarget(target) } }}
       />
       <Toasts toasts={toasts} onDismiss={(id) => setToasts((l) => l.filter((t) => t.id !== id))} />
+      </div>
 
+      {showIntro && <Welcome onClose={() => { setShowIntro(false); try { localStorage.setItem(INTRO_KEY, '1') } catch { /* ignore */ } }} />}
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {yearOverlay !== null && (
         <div className="year-overlay" key={yearOverlay}><div className="year-text">Year {yearOverlay}</div><div className="year-sub">The seasons turn</div></div>
       )}

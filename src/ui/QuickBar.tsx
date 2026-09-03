@@ -101,6 +101,8 @@ export function QuickBar({ state, selected, attackTarget, onAttack, onCancelAtta
               <Swords /> Attack{targets.length ? ` (${targets.length})` : ''}
             </button>
             <button className="btn" disabled={locked || armySize(p.garrison) === 0} onClick={() => onSection('move')}>Move troops</button>
+            {targets.length > 0 && !locked && <span className="qb-hint">Click a red-ringed neighbour to attack it</span>}
+            {locked && <span className="qb-hint">This garrison has acted this turn</span>}
           </>
         ) : (
           <>
