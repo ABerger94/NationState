@@ -4,6 +4,11 @@ A turn-based nation building strategy game that runs entirely in the browser, re
 
 ## Features
 
+- **Real-time 3D world.** Extruded hex terrain with forests, snow-capped peaks, animated water, sky, fog, soft shadows and drifting clouds. Cities grow as you build, walls rise, banners fly, troops stand guard, and armies march into battle with visible clashes.
+- **Objectives.** Twenty staged goals with gold rewards guide new players from their first farm to hegemony.
+- **Edicts.** One government edict per sphere (economy, military, society) with real trade-offs.
+- **Map resources.** Horses, gems, spices, vineyards, fish, ore, timber and fertile soil give provinces character and reasons to fight over them. Luxuries calm the whole realm; horses make cavalry cheaper and stronger.
+
 - **A 3D world.** Extruded terrain hexes with forests, snow-capped peaks, coasts and animated water, drifting clouds with real shadows, national borders, banners and capital towers. Cities visibly grow as you build; walls rise; garrisons stand on the tile. Armies march across the map when you attack and battles flash where they happen.
 - **A polished HUD.** Glass panels, tweened resource counters, an in-game advisor that flags famine, unrest, idle scholars and easy conquests, live toasts for world events, a turn report, hover tooltips, keyboard shortcuts (Enter to end turn, 1-5 for tabs, H for home, Tab to hide the panel) and procedural sound with a mute toggle.
 

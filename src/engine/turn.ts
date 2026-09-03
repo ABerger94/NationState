@@ -6,6 +6,7 @@ import { growProvince, growTribal, updateUnrest } from './population'
 import { runAI } from './ai'
 import { resolveRebellion, checkElimination } from './military'
 import { rollEvent } from './events'
+import { checkObjectives } from './objectives'
 import { nextRand } from './rng'
 import { changeRelation } from './diplomacy'
 
@@ -42,7 +43,7 @@ function processEconomy(state: GameState, n: Nation): void {
   const foodRatio = budget.income.food / Math.max(1, budget.upkeep.food)
   for (const p of ownedProvinces(state, n.id)) {
     growProvince(p, n, { stability: budget.stability, foodRatio, starving })
-    updateUnrest(state, p, n, starving)
+    updateUnrest(state, p, n, starving, budget.luxuries)
   }
 
   if (n.research) {
@@ -56,7 +57,7 @@ function processEconomy(state: GameState, n: Nation): void {
     }
   }
 
-  if (n.wars.length > 0) n.warWeariness = Math.min(100, n.warWeariness + 1.5 * n.wars.length)
+  if (n.wars.length > 0) n.warWeariness = Math.min(100, n.warWeariness + 1.5 * n.wars.length * (n.policies.military === 'expansionist' ? 1.5 : 1))
   else n.warWeariness = Math.max(0, n.warWeariness - 3)
 }
 
@@ -129,6 +130,7 @@ export function endTurn(prev: GameState): GameState {
   driftRelations(state)
   for (const n of state.nations) checkElimination(state, n.id)
 
+  checkObjectives(state)
   state.turn += 1
   checkVictory(state)
   if (!state.gameOver) state.pendingEvent = rollEvent(state)

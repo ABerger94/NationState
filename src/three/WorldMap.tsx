@@ -17,6 +17,7 @@ interface Props {
   selected: number | null
   targets: number[]
   highlight: number[]
+  attackTarget?: number | null
   focus: Focus | null
   fx: Fx[]
   onFxDone: (id: number) => void
@@ -169,7 +170,7 @@ function CameraRig({ focus, autoRotate, interactive, initialTarget }: { focus: F
 
 const focusPositions = new Map<number, THREE.Vector3>()
 
-export function WorldMap({ state, selected, targets, highlight, focus, fx, onFxDone, onSelect, onHover, interactive, autoRotate = false, showLabels = true }: Props) {
+export function WorldMap({ state, selected, targets, highlight, attackTarget = null, focus, fx, onFxDone, onSelect, onHover, interactive, autoRotate = false, showLabels = true }: Props) {
   const [hovered, setHoveredState] = useState<number | null>(null)
   const setHovered = useCallback((id: number | null) => { setHoveredState(id); onHover?.(id) }, [onHover])
   const initialTarget = useMemo<[number, number, number]>(() => (interactive ? [2.2, 0, 0.6] : [0, 0, 0]), [interactive])
@@ -206,7 +207,7 @@ export function WorldMap({ state, selected, targets, highlight, focus, fx, onFxD
             <Tile
               key={p.id} p={p} state={state} height={heights[p.id]}
               selected={selected === p.id} hovered={hovered === p.id}
-              target={targets.includes(p.id)} highlight={highlight.includes(p.id)}
+              target={targets.includes(p.id)} highlight={highlight.includes(p.id)} armed={attackTarget === p.id}
               interactive={interactive} onSelect={onSelect} onHover={setHovered}
             />
           ))}

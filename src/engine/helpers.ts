@@ -1,4 +1,4 @@
-import type { Army, GameState, LogKind, Nation, Province, Resources, TechKey } from './types'
+import type { Army, GameState, LogKind, Nation, NationStats, Policies, Province, ResourceKind, Resources, TechKey } from './types'
 import { UNIT_ORDER, UNITS } from './data'
 
 export const emptyArmy = (): Army => ({ militia: 0, infantry: 0, archers: 0, cavalry: 0, siege: 0 })
@@ -91,9 +91,28 @@ export function ownerName(state: GameState, ownerId: number | null): string {
   return ownerId === null ? 'Independent' : state.nations[ownerId].name
 }
 
-export function log(state: GameState, kind: LogKind, text: string): void {
-  state.log.push({ id: state.nextId++, turn: state.turn, kind, text })
+const IMPORTANT = /declared war|wiped from the map|has fallen|Rebellion|Objective|peace treaty|alliance/i
+
+/** Adds a chronicle entry. Entries are flagged important when they concern the player or reshape the world. */
+export function log(state: GameState, kind: LogKind, text: string, important?: boolean): void {
+  const player = state.nations.find((n) => n.isPlayer)
+  const flag = important ?? (kind === 'event' || (!!player && text.includes(player.name)) || IMPORTANT.test(text))
+  state.log.push({ id: state.nextId++, turn: state.turn, kind, text, important: flag })
   if (state.log.length > 300) state.log.splice(0, state.log.length - 300)
+}
+
+export const emptyStats = (): NationStats => ({ built: 0, recruited: 0, battlesWon: 0, defensiveWins: 0, tribalConquests: 0, nationConquests: 0 })
+export const defaultPolicies = (): Policies => ({ economy: null, military: null, society: null, changedTurn: -99 })
+
+export function nationHasResource(state: GameState, nationId: number, kind: ResourceKind): boolean {
+  return state.provinces.some((p) => p.ownerId === nationId && p.resource === kind)
+}
+
+/** Number of distinct luxury kinds a nation controls (capped at 3). */
+export function luxuryCount(state: GameState, nationId: number): number {
+  const kinds = new Set<ResourceKind>()
+  for (const p of state.provinces) if (p.ownerId === nationId && (p.resource === 'gems' || p.resource === 'spices' || p.resource === 'wine')) kinds.add(p.resource)
+  return Math.min(3, kinds.size)
 }
 
 export function yearOf(state: GameState, turn = state.turn): number {

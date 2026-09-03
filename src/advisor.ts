@@ -43,13 +43,13 @@ export function getAdvice(state: GameState): Advice[] {
       if (q.ownerId === player.id) continue
       const enemy = q.ownerId === null ? null : state.nations[q.ownerId]
       if (enemy && atWar(player, enemy)) {
-        const threat = attackPower(q.garrison, enemy, p.terrain, 2)
+        const threat = attackPower(q.garrison, enemy, p.terrain, 2, state)
         const ratio = own > 0 ? threat / own : 99
         if (ratio > 1.1 && (!worstThreat || ratio > worstThreat.ratio)) worstThreat = { p, enemy: enemy.name, ratio }
       }
       if (armySize(p.garrison) === 0 && enemy && !undefended) undefended = p
       if (q.ownerId === null && p.lockedTurn !== state.turn) {
-        const mine = attackPower({ ...p.garrison, militia: 0 }, player, q.terrain, 2)
+        const mine = attackPower({ ...p.garrison, militia: 0 }, player, q.terrain, 2, state)
         const theirs = defensePower(q.garrison, null, q, p.garrison.siege)
         const ratio = theirs > 0 ? mine / theirs : 99
         if (ratio >= 1.7 && (!expansion || ratio > expansion.ratio)) expansion = { from: p, to: q.name, ratio }

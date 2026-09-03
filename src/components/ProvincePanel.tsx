@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Army, BuildingKey, GameState, Province, UnitKey } from '../engine/types'
 import type { Action } from '../engine/actions'
 import { attackTargets, canTransfer } from '../engine/actions'
-import { BUILDINGS, BUILDING_ORDER, TERRAINS, UNITS, UNIT_ORDER } from '../engine/data'
+import { BUILDINGS, BUILDING_ORDER, RESOURCES, TERRAINS, UNITS, UNIT_ORDER } from '../engine/data'
 import { armySize, describeArmy, emptyArmy, fmt, hexDistance, ownedProvinces, ownerName, playerNation } from '../engine/helpers'
 import { buildingCost, canBuild, canRecruit, provinceOutput, unitCost } from '../engine/economy'
 import { provinceCapacity } from '../engine/population'
@@ -18,6 +18,8 @@ interface Props {
   transferTarget: number | null
   setTransferTarget: (id: number | null) => void
   onFocus?: (id: number) => void
+  attackPreset?: number | null
+  onDiplomacy?: () => void
 }
 
 function costText(c: { gold: number; wood: number; iron: number }) {
@@ -28,7 +30,7 @@ function costText(c: { gold: number; wood: number; iron: number }) {
   return parts.join(' ')
 }
 
-export function ProvincePanel({ state, province: p, dispatch, onSelect, transferTarget, setTransferTarget, onFocus }: Props) {
+export function ProvincePanel({ state, province: p, dispatch, onSelect, transferTarget, setTransferTarget, onFocus, attackPreset = null, onDiplomacy }: Props) {
   const player = playerNation(state)
   const [unit, setUnit] = useState<UnitKey>('infantry')
   const [count, setCount] = useState(1)
@@ -51,6 +53,13 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
     if (attackTo !== null && !targets.includes(attackTo)) setAttackTo(targets[0] ?? null)
   }, [targets, attackTo])
 
+  useEffect(() => {
+    if (attackPreset !== null && targets.includes(attackPreset)) {
+      setAttackTo(attackPreset)
+      setTimeout(() => document.getElementById('sec-attack')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+    }
+  }, [attackPreset, targets])
+
   if (!p) return <p className="muted">Select a province on the map.</p>
 
   const owner = p.ownerId === null ? null : state.nations[p.ownerId]
@@ -64,7 +73,7 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
 
   const target = attackTo !== null ? state.provinces[attackTo] : null
   const targetOwner = target && target.ownerId !== null ? state.nations[target.ownerId] : null
-  const myPower = target ? attackPower(attackArmy, player, target.terrain, 2) : 0
+  const myPower = target ? attackPower(attackArmy, player, target.terrain, 2, state) : 0
   const theirPower = target ? defensePower(target.garrison, targetOwner, target, attackArmy.siege) : 0
   const ratio = theirPower > 0 ? myPower / theirPower : 99
   const odds = ratio >= 1.8 ? ['Overwhelming', 'ok'] : ratio >= 1.25 ? ['Favourable', 'ok'] : ratio >= 0.9 ? ['Even', 'warn'] : ['Poor', 'bad']
@@ -85,6 +94,12 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
         {owner && !mine && (atWar(player, owner) ? <span className="bad"> · at war</span> : player.allies.includes(owner.id) ? <span className="ok"> · ally</span> : <span> · at peace</span>)}
         {p.conqueredTurn !== null && state.turn - p.conqueredTurn < 10 && <span className="warn"> · recently conquered</span>}
       </p>
+      {owner && !mine && onDiplomacy && (
+        <div className="row" style={{ marginBottom: 8 }}>
+          <button className="btn small" onClick={onDiplomacy}>Diplomacy with {owner.name}</button>
+          {!atWar(player, owner) && <span className="muted small">At peace. Declare war before attacking.</span>}
+        </div>
+      )}
 
       <div className="card">
         <dl className="kv">
@@ -95,7 +110,9 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
           <dt>Wood / Iron</dt><dd>{out.wood.toFixed(1)} / {out.iron.toFixed(1)}</dd>
           {owner && <><dt>Taxes</dt><dd>{out.gold.toFixed(1)} gold</dd></>}
           <dt>Terrain</dt><dd>defence ×{t.defense} · cavalry ×{t.cavalry}</dd>
+          {p.resource && <><dt>Resource</dt><dd title={RESOURCES[p.resource].description}><span style={{ color: RESOURCES[p.resource].color }}>{RESOURCES[p.resource].glyph}</span> {RESOURCES[p.resource].name}</dd></>}
         </dl>
+        {p.resource && <div className="muted small" style={{ marginTop: 6 }}>{RESOURCES[p.resource].description}</div>}
         <div style={{ marginTop: 6 }}><Bar value={p.unrest} color={unrestColor(p.unrest)} /></div>
       </div>
 
@@ -111,7 +128,7 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
         </div>
       )}
 
-      <h3>Buildings</h3>
+      <h3 id="sec-build">Buildings</h3>
       <table className="tbl">
         <tbody>
           {BUILDING_ORDER.map((b: BuildingKey) => {
@@ -139,10 +156,10 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
 
       {mine && (
         <>
-          <h3>Recruit</h3>
+          <h3 id="sec-recruit">Recruit</h3>
           <div className="row">
             <select value={unit} onChange={(e) => setUnit(e.target.value as UnitKey)}>
-              {UNIT_ORDER.map((k) => <option key={k} value={k}>{UNITS[k].name} ({costText(unitCost(k))})</option>)}
+              {UNIT_ORDER.map((k) => <option key={k} value={k}>{UNITS[k].name} ({costText(unitCost(k, 1, player, state))})</option>)}
             </select>
             <input type="number" min={1} max={50} value={count} onChange={(e) => setCount(Math.max(1, parseInt(e.target.value, 10) || 1))} />
             {(() => {
@@ -155,7 +172,7 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
             {UNITS[unit].requiresBarracks && p.buildings.barracks < 1 && <span className="warn"> Needs a barracks here.</span>}
           </p>
 
-          <h3>Attack</h3>
+          <h3 id="sec-attack">Attack</h3>
           {targets.length === 0 ? (
             <p className="muted small">{locked ? 'This garrison has already acted this turn.' : armySize(p.garrison) === 0 ? 'No troops here.' : 'No adjacent enemy or independent province. Declare war in Diplomacy to open new fronts.'}</p>
           ) : (
@@ -189,7 +206,7 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
             </div>
           )}
 
-          <h3>Move troops</h3>
+          <h3 id="sec-move">Move troops</h3>
           {myProvinces.length === 0 ? <p className="muted small">You have no other province.</p> : locked ? <p className="muted small">This garrison has already acted this turn.</p> : (
             <div className="stack">
               <select value={transferTarget ?? ''} onChange={(e) => setTransferTarget(e.target.value === '' ? null : parseInt(e.target.value, 10))}>

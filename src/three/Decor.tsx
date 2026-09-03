@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import type { GameState, Province, UnitKey } from '../engine/types'
+import type { GameState, Province, ResourceKind, UnitKey } from '../engine/types'
 import { BUILDING_ORDER } from '../engine/data'
 import { armySize } from '../engine/helpers'
 import { GEO, mat } from './materials'
@@ -122,6 +122,58 @@ const BUILDING_STYLE: Record<string, { geo: THREE.BufferGeometry; color: string;
 
 const UNIT_HEIGHT: Record<UnitKey, number> = { militia: 0.1, infantry: 0.13, archers: 0.12, cavalry: 0.16, siege: 0.14 }
 
+function resourceProps(kind: ResourceKind, cx: number, cz: number, top: number, rnd: () => number, keyStart: number): JSX.Element[] {
+  const nodes: JSX.Element[] = []
+  let key = keyStart
+  const a = Math.PI / 2 + (rnd() - 0.5) * 0.4
+  const r = kind === 'fish' ? 0.86 : 0.64
+  const bx = cx + Math.cos(a) * r
+  const bz = cz + Math.sin(a) * r
+  const spread = (i: number, n: number, rad = 0.09) => [bx + Math.cos((i / n) * Math.PI * 2) * rad, bz + Math.sin((i / n) * Math.PI * 2) * rad]
+  switch (kind) {
+    case 'horses':
+      for (let i = 0; i < 2; i++) {
+        const [x, z] = spread(i, 2, 0.1)
+        const ry = rnd() * Math.PI
+        nodes.push(<Prop key={key++} geometry={GEO.box} color="#7a4a26" x={x} y={top + 0.05} z={z} sx={0.14} sy={0.07} sz={0.06} ry={ry} />)
+        nodes.push(<Prop key={key++} geometry={GEO.box} color="#5a3618" x={x + Math.cos(ry) * 0.08} y={top + 0.09} z={z - Math.sin(ry) * 0.08} sx={0.05} sy={0.06} sz={0.04} ry={ry} />)
+        for (let l = 0; l < 2; l++) nodes.push(<Prop key={key++} geometry={GEO.box} color="#5a3618" x={x + (l ? 0.04 : -0.04)} y={top} z={z} sx={0.02} sy={0.05} sz={0.05} ry={ry} />)
+      }
+      break
+    case 'gems':
+      for (let i = 0; i < 3; i++) { const [x, z] = spread(i, 3, 0.07); nodes.push(<Prop key={key++} geometry={GEO.cone} color="#c77dff" x={x} y={top} z={z} sx={0.09} sy={0.14 + rnd() * 0.08} sz={0.09} ry={rnd() * Math.PI} opts={{ emissive: '#7a2fd6', emissiveIntensity: 0.6, roughness: 0.2 }} />) }
+      break
+    case 'spices':
+      for (let i = 0; i < 4; i++) { const [x, z] = spread(i, 4, 0.09); nodes.push(<Prop key={key++} geometry={GEO.sphere} color={i % 2 ? '#ff7f3f' : '#d94a1e'} x={x} y={top} z={z} sx={0.09} sy={0.08} sz={0.09} />) }
+      break
+    case 'wine':
+      for (let i = 0; i < 3; i++) {
+        const [x, z] = spread(i, 3, 0.09)
+        nodes.push(<Prop key={key++} geometry={GEO.box} color="#3f7a3a" x={x} y={top} z={z} sx={0.05} sy={0.1} sz={0.16} />)
+        nodes.push(<Prop key={key++} geometry={GEO.sphere} color="#8e2a5b" x={x} y={top + 0.08} z={z} sx={0.06} sy={0.06} sz={0.06} />)
+      }
+      break
+    case 'fish':
+      for (let i = 0; i < 2; i++) {
+        const [x, z] = spread(i, 2, 0.12)
+        nodes.push(<Prop key={key++} geometry={GEO.box} color="#7a4a26" x={x} y={top - 0.02} z={z} sx={0.16} sy={0.04} sz={0.07} ry={a} />)
+        nodes.push(<Prop key={key++} geometry={GEO.cone} color="#f2f2f2" x={x} y={top + 0.02} z={z} sx={0.1} sy={0.16} sz={0.02} ry={a} />)
+      }
+      break
+    case 'ore':
+      for (let i = 0; i < 3; i++) { const [x, z] = spread(i, 3, 0.08); nodes.push(<Prop key={key++} geometry={GEO.sphere} color="#4a5058" x={x} y={top} z={z} sx={0.1} sy={0.08} sz={0.1} opts={{ metalness: 0.5, roughness: 0.4 }} />) }
+      break
+    case 'timber':
+      for (let i = 0; i < 3; i++) nodes.push(<Prop key={key++} geometry={GEO.box} color="#6b4423" x={bx} y={top + i * 0.05} z={bz + (i === 1 ? 0 : i === 0 ? -0.04 : 0.04)} sx={0.22} sy={0.05} sz={0.05} />)
+      break
+    case 'fertile':
+      nodes.push(<Prop key={key++} geometry={GEO.box} color="#e3c95a" x={bx} y={top} z={bz} sx={0.24} sy={0.03} sz={0.2} />)
+      for (let i = 0; i < 3; i++) nodes.push(<Prop key={key++} geometry={GEO.cone} color="#f0d878" x={bx - 0.07 + i * 0.07} y={top + 0.03} z={bz} sx={0.04} sy={0.1} sz={0.04} />)
+      break
+  }
+  return nodes
+}
+
 /** Everything on a tile that changes with play: houses, buildings, walls, banner, tower and troops. */
 export function TileProps({ p, state, top }: { p: Province; state: GameState; top: number }) {
   const owner = p.ownerId === null ? null : state.nations[p.ownerId]
@@ -194,6 +246,15 @@ export function TileProps({ p, state, top }: { p: Province; state: GameState; to
     } else {
       nodes.push(<Prop key={key++} geometry={GEO.cone} color="#7d7568" x={cx + ox} y={top} z={cz + oz} sx={0.16} sy={0.14} sz={0.16} />)
     }
+    if (p.resource) nodes.push(...resourceProps(p.resource, cx, cz, top, rnd, key)), key += 40
+    if (owner?.isPlayer && p.isCapital) {
+      nodes.push(
+        <mesh key={key++} position={[cx + ox, top + 2.1, cz + oz]}>
+          <cylinderGeometry args={[0.1, 0.34, 3.2, 12, 1, true]} />
+          <meshBasicMaterial color={color} transparent opacity={0.16} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
+        </mesh>,
+      )
+    }
     // Troops
     if (units > 0) {
       const figures = Math.min(9, Math.ceil(units / 2))
@@ -216,7 +277,7 @@ export function TileProps({ p, state, top }: { p: Province; state: GameState; to
     }
     return nodes
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [p.id, p.col, p.row, p.terrain, state.seed, top, buildingsKey, houses, p.isCapital, color, owner === null, units, soldierKey])
+  }, [p.id, p.col, p.row, p.terrain, p.resource, state.seed, top, buildingsKey, houses, p.isCapital, color, owner === null, owner?.isPlayer, units, soldierKey])
 
   return <group>{content}</group>
 }

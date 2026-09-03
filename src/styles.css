@@ -250,3 +250,47 @@ label.field, .field-label { display: flex; flex-direction: column; gap: 5px; fon
 .hc-owner { font-weight: 600; margin-bottom: 4px; }
 .hc-row { display: flex; justify-content: space-between; }
 .hc-army { margin-top: 3px; font-size: 11.5px; }
+
+/* ---------- identity ---------- */
+.crest { border: none; cursor: pointer; }
+.you-pill, .tag.you { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; padding: 1px 6px; border-radius: 6px; background: #3d8bff; color: #fff; border: none; vertical-align: 2px; }
+.legend-row.me { background: rgba(61, 139, 255, .12); }
+.badge.mine { color: #fff; box-shadow: 0 0 0 2px rgba(61, 139, 255, .35), 0 3px 12px rgba(0,0,0,.5); }
+.icon-btn.wide { width: auto; padding: 0 10px; gap: 6px; display: flex; font-weight: 700; font-variant-numeric: tabular-nums; }
+.icon-btn.attention { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px rgba(224,179,65,.35); }
+.warn-pill { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: rgba(0,0,0,.25); font-weight: 800; }
+
+/* ---------- quick bar ---------- */
+.quickbar { position: absolute; left: 50%; bottom: 14px; transform: translateX(calc(-50% - 215px)); z-index: 9; background: var(--glass); backdrop-filter: blur(16px); border: 1px solid var(--border-strong); border-radius: 14px; padding: 10px 14px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; min-width: 480px; max-width: 720px; animation: rise .25s ease-out; }
+.side.closed ~ .quickbar { transform: translateX(-50%); }
+.quickbar.attack-mode { border-color: rgba(255, 77, 77, .55); box-shadow: 0 0 0 1px rgba(255,77,77,.2), var(--shadow); }
+.qb-title { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.qb-title svg { color: var(--accent); }
+.qb-garrison { margin-left: auto; display: flex; align-items: center; gap: 4px; font-weight: 700; color: var(--muted); }
+.qb-odds { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.qb-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.qb-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+.toasts { bottom: 110px; }
+
+/* ---------- objectives ---------- */
+.objectives { position: absolute; left: 12px; top: 80px; width: 320px; z-index: 8; background: var(--glass); backdrop-filter: blur(14px); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+.obj-icon { color: var(--accent); font-size: 14px; }
+.objectives ul { list-style: none; margin: 0; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 4px; }
+.obj { padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,.03); font-size: 12.5px; }
+.obj-row { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.obj-reward { color: var(--accent); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.obj-progress { margin-top: 4px; font-size: 11px; color: var(--info); font-variant-numeric: tabular-nums; }
+.hud-left { position: absolute; left: 12px; bottom: 12px; z-index: 8; }
+.hud-left .advisor { position: static; }
+
+/* ---------- edicts ---------- */
+.edict-group { margin-bottom: 10px; }
+.edict-cat { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 4px; }
+.edict-options { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.edict { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 8px; border-radius: 10px; border: 1px solid var(--border-strong); background: rgba(255,255,255,.04); color: var(--text); cursor: pointer; font-family: var(--font); font-size: 12px; }
+.edict:hover:not(:disabled) { border-color: var(--accent); }
+.edict.active { border-color: var(--accent); background: rgba(224,179,65,.12); box-shadow: inset 0 0 0 1px rgba(224,179,65,.4); }
+.edict:disabled:not(.active) { opacity: .5; cursor: not-allowed; }
+
+@media (max-width: 1100px) { .objectives { display: none; } }
+@media (max-width: 900px) { .quickbar { min-width: 0; left: 8px; right: 8px; transform: none; bottom: calc(52vh + 16px); } .side.closed ~ .quickbar { transform: none; } }

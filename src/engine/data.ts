@@ -1,4 +1,4 @@
-import type { BuildingKey, Difficulty, Personality, Resources, TechKey, Terrain, UnitKey } from './types'
+import type { BuildingKey, Difficulty, EconomyPolicy, MilitaryPolicy, Personality, ResourceKind, Resources, SocietyPolicy, TechKey, Terrain, UnitKey } from './types'
 
 export const COLS = 11
 export const ROWS = 8
@@ -69,15 +69,50 @@ export const TECH_ORDER: TechKey[] = [
 
 export interface AiNationDef { name: string; adjective: string; color: string; personality: Personality }
 export const AI_NATIONS: AiNationDef[] = [
-  { name: 'Kingdom of Valoria', adjective: 'Valorian', color: '#c0392b', personality: 'aggressive' },
-  { name: 'Kethrand Republic', adjective: 'Kethrandi', color: '#8e44ad', personality: 'merchant' },
-  { name: 'Ostmark', adjective: 'Ostmarker', color: '#2980b9', personality: 'defensive' },
-  { name: 'Sarnian Empire', adjective: 'Sarnian', color: '#d35400', personality: 'aggressive' },
-  { name: 'Drakmoor Clans', adjective: 'Drakmoori', color: '#16a085', personality: 'builder' },
-  { name: 'Illyrion', adjective: 'Illyrian', color: '#6c7a89', personality: 'merchant' },
-  { name: 'Cassar Dominion', adjective: 'Cassarian', color: '#b7950b', personality: 'defensive' },
+  { name: 'Kingdom of Valoria', adjective: 'Valorian', color: '#d63a3a', personality: 'aggressive' },
+  { name: 'Kethrand Republic', adjective: 'Kethrandi', color: '#9b59b6', personality: 'merchant' },
+  { name: 'Ostmark', adjective: 'Ostmarker', color: '#ef8f2a', personality: 'defensive' },
+  { name: 'Sarnian Empire', adjective: 'Sarnian', color: '#d81b60', personality: 'aggressive' },
+  { name: 'Drakmoor Clans', adjective: 'Drakmoori', color: '#17b8a6', personality: 'builder' },
+  { name: 'Illyrion', adjective: 'Illyrian', color: '#b8c2cc', personality: 'merchant' },
+  { name: 'Cassar Dominion', adjective: 'Cassarian', color: '#c9a227', personality: 'defensive' },
 ]
-export const PLAYER_COLOR = '#e0b341'
+/** The player is always royal blue so their realm reads instantly against every terrain. */
+export const PLAYER_COLOR = '#3d8bff'
+
+export interface ResourceDef { name: string; description: string; terrains: Terrain[]; luxury: boolean; color: string; glyph: string }
+export const RESOURCES: Record<ResourceKind, ResourceDef> = {
+  fertile: { name: 'Fertile soil', description: '+25% food here.', terrains: ['plains'], luxury: false, color: '#e3c95a', glyph: '❦' },
+  fish: { name: 'Fishing grounds', description: '+20% food and +2 gold here.', terrains: ['coast'], luxury: false, color: '#9fd8ff', glyph: '≈' },
+  timber: { name: 'Old-growth timber', description: '+50% wood here.', terrains: ['forest'], luxury: false, color: '#7a4a24', glyph: '▲' },
+  ore: { name: 'Rich ore', description: '+50% iron here.', terrains: ['hills', 'mountains'], luxury: false, color: '#5c6470', glyph: '◆' },
+  horses: { name: 'Horses', description: '+10% food here. Owning horses makes cavalry 20% cheaper and 10% stronger.', terrains: ['plains', 'hills'], luxury: false, color: '#8b5a2b', glyph: '♞' },
+  gems: { name: 'Gems', description: 'Luxury: +3 gold here and -1 unrest per turn in every province.', terrains: ['mountains', 'hills'], luxury: true, color: '#c77dff', glyph: '✦' },
+  spices: { name: 'Spices', description: 'Luxury: +3 gold here and -1 unrest per turn in every province.', terrains: ['coast', 'forest'], luxury: true, color: '#ff7f3f', glyph: '✿' },
+  wine: { name: 'Vineyards', description: 'Luxury: +3 gold here and -1 unrest per turn in every province.', terrains: ['plains', 'hills'], luxury: true, color: '#8e2a5b', glyph: '❁' },
+}
+export const RESOURCE_ORDER: ResourceKind[] = ['fertile', 'fish', 'timber', 'ore', 'horses', 'gems', 'spices', 'wine']
+
+export interface PolicyDef { name: string; description: string }
+export const POLICIES: { economy: Record<EconomyPolicy, PolicyDef>; military: Record<MilitaryPolicy, PolicyDef>; society: Record<SocietyPolicy, PolicyDef> } = {
+  economy: {
+    agrarian: { name: 'Agrarianism', description: '+15% food, -10% tax income.' },
+    mercantile: { name: 'Mercantilism', description: '+15% tax income, -8% food.' },
+    industrious: { name: 'Industry', description: '+30% wood and iron, -5% food.' },
+  },
+  military: {
+    levies: { name: 'Levies', description: 'Troops cost 25% less gold to recruit, but attack 10% weaker.' },
+    drilled: { name: 'Drilled ranks', description: '+10% defence, +20% troop upkeep.' },
+    expansionist: { name: 'Expansionism', description: '+10% attack. Conquered land is more restless and war weariness grows 50% faster.' },
+  },
+  society: {
+    tolerant: { name: 'Tolerance', description: '-2 unrest per turn everywhere, -15% science.' },
+    scholarly: { name: 'Scholarship', description: '+30% science, +1 unrest per turn everywhere.' },
+    devout: { name: 'Piety', description: '+8 stability, -8% tax income.' },
+  },
+}
+export const POLICY_CHANGE_COST = 60
+export const POLICY_COOLDOWN = 5
 
 export interface PersonalityDef {
   label: string; aggression: number; armyRatio: number; attackRatio: number; reserve: number

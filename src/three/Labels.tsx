@@ -17,7 +17,7 @@ export function Labels({ state, heights, playerId }: Props) {
         return (
           <Html key={p.id} transform sprite position={[x, heights[p.id] + 0.95, z]} scale={0.34} wrapperClass="label-wrap" zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
             <div className="label">
-              <div className={cls} style={{ borderColor: owner?.color ?? '#6b6b6b' }}>
+              <div className={cls} style={p.ownerId === playerId ? { borderColor: '#ffffff', background: owner!.color } : { borderColor: owner?.color ?? '#6b6b6b' }}>
                 {p.isCapital && <span className="star">★</span>}
                 <span className="units">{units}</span>
               </div>

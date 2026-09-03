@@ -55,7 +55,8 @@ describe('reducer', () => {
     const cost = buildingCost(player, 'farm')
     const next = reducer(s, { type: 'BUILD', provinceId: cap.id, building: 'farm' }) as GameState
     expect(next.provinces[cap.id].buildings.farm).toBe(cap.buildings.farm + 1)
-    expect(next.nations[0].resources.gold).toBe(player.resources.gold - cost.gold)
+    // The first construction also completes the 'Lay the first stone' objective (+30 gold).
+    expect(next.nations[0].resources.gold).toBe(player.resources.gold - cost.gold + 30)
   })
   it('rejects attacks on provinces you are not at war with', () => {
     const s = newGame()
@@ -118,5 +119,51 @@ describe('simulation', () => {
     const wars = s.log.filter((e) => e.text.includes('declared war')).length
     const emptyAi = s.provinces.filter((p) => p.ownerId !== null && p.ownerId !== 0 && armySize(p.garrison) === 0).length
     console.log('battles kept:', s.battles.length, 'war declarations in log:', wars, 'empty AI garrisons:', emptyAi)
+  })
+})
+
+describe('objectives, edicts and migration', () => {
+  it('completes the first objective when a building is constructed and pays the reward', () => {
+    const s = newGame()
+    const player = playerNation(s)
+    const cap = s.provinces[player.capitalId]
+    const gold = player.resources.gold
+    const next = reducer(s, { type: 'BUILD', provinceId: cap.id, building: 'farm' }) as GameState
+    expect(next.objectives.map((o) => o.id)).toContain('build-1')
+    expect(next.nations[0].resources.gold).toBe(gold - buildingCost(player, 'farm').gold + 30)
+  })
+  it('first edict is free, the second change costs gold and waits for the cooldown', () => {
+    const s = newGame()
+    const gold = s.nations[0].resources.gold
+    const a = reducer(s, { type: 'SET_POLICY', category: 'economy', value: 'agrarian' }) as GameState
+    expect(a.nations[0].policies.economy).toBe('agrarian')
+    expect(a.nations[0].resources.gold).toBe(gold)
+    const b = reducer(a, { type: 'SET_POLICY', category: 'economy', value: 'mercantile' }) as GameState
+    expect(b.nations[0].policies.economy).toBe('mercantile')
+    expect(b.nations[0].resources.gold).toBe(gold - 60)
+    const c = reducer(b, { type: 'SET_POLICY', category: 'economy', value: 'industrious' })
+    expect(c).toBe(b)
+  })
+  it('agrarian edict raises food and lowers gold', () => {
+    const s = newGame()
+    const before = nationBudget(s, playerNation(s))
+    const a = reducer(s, { type: 'SET_POLICY', category: 'economy', value: 'agrarian' }) as GameState
+    const after = nationBudget(a, playerNation(a))
+    expect(after.income.food).toBeGreaterThan(before.income.food)
+    expect(after.income.gold).toBeLessThan(before.income.gold)
+  })
+  it('generates map resources and migrates old saves', async () => {
+    const s = newGame()
+    expect(s.provinces.some((p) => p.resource !== null)).toBe(true)
+    const { migrate } = await import('./persistence')
+    const old = JSON.parse(JSON.stringify(s)) as GameState
+    for (const n of old.nations) { delete (n as Partial<typeof n>).policies; delete (n as Partial<typeof n>).stats }
+    delete (old as Partial<GameState>).objectives
+    old.version = 1
+    const m = migrate(old)
+    expect(m.nations[0].policies.economy).toBeNull()
+    expect(m.nations[0].stats.built).toBe(0)
+    expect(m.objectives).toEqual([])
+    expect(m.nations[0].color).toBe('#3d8bff')
   })
 })

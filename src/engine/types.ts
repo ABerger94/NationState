@@ -9,6 +9,14 @@ export type TechKey =
   | 'medicine' | 'philosophy' | 'logistics' | 'engineering' | 'banking' | 'professionalArmy'
 export type Personality = 'aggressive' | 'builder' | 'merchant' | 'defensive'
 export type Difficulty = 'easy' | 'normal' | 'hard'
+export type ResourceKind = 'horses' | 'gems' | 'spices' | 'wine' | 'fish' | 'ore' | 'timber' | 'fertile'
+export type EconomyPolicy = 'agrarian' | 'mercantile' | 'industrious'
+export type MilitaryPolicy = 'levies' | 'drilled' | 'expansionist'
+export type SocietyPolicy = 'tolerant' | 'scholarly' | 'devout'
+export type PolicyCategory = 'economy' | 'military' | 'society'
+export interface Policies { economy: EconomyPolicy | null; military: MilitaryPolicy | null; society: SocietyPolicy | null; changedTurn: number }
+export interface NationStats { built: number; recruited: number; battlesWon: number; defensiveWins: number; tribalConquests: number; nationConquests: number }
+export interface CompletedObjective { id: string; turn: number }
 
 export type Army = Record<UnitKey, number>
 export type Resources = Record<Resource, number>
@@ -19,6 +27,7 @@ export interface Province {
   col: number
   row: number
   terrain: Terrain
+  resource: ResourceKind | null
   ownerId: number | null
   population: number
   unrest: number
@@ -54,10 +63,12 @@ export interface Nation {
   capitalId: number
   provincesLost: number
   provincesGained: number
+  policies: Policies
+  stats: NationStats
 }
 
 export type LogKind = 'info' | 'war' | 'economy' | 'diplomacy' | 'event' | 'battle'
-export interface LogEntry { id: number; turn: number; kind: LogKind; text: string }
+export interface LogEntry { id: number; turn: number; kind: LogKind; text: string; important: boolean }
 
 export interface BattleRound {
   round: number
@@ -120,4 +131,5 @@ export interface GameState {
   winner: number | null
   gameOver: boolean
   gameOverReason: string | null
+  objectives: CompletedObjective[]
 }

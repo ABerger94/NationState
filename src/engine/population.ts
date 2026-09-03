@@ -35,8 +35,10 @@ export function growTribal(p: Province): void {
   if (armySize(p.garrison) < want) p.garrison.militia += 1
 }
 
-export function updateUnrest(state: GameState, p: Province, owner: Nation, starving: number): void {
-  let d = (owner.taxRate - 20) / 4 - 2 + p.devastation * 5 - p.buildings.temple * 3
+export function updateUnrest(state: GameState, p: Province, owner: Nation, starving: number, luxuries = 0): void {
+  let d = (owner.taxRate - 20) / 4 - 2 + p.devastation * 5 - p.buildings.temple * 3 - luxuries
+  if (owner.policies.society === 'tolerant') d -= 2
+  else if (owner.policies.society === 'scholarly') d += 1
   if (hasTech(owner, 'philosophy')) d -= 1
   if (starving > 0) d += 8 * starving
   if (p.conqueredTurn !== null && state.turn - p.conqueredTurn < 10) d += 3

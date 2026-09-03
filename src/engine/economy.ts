@@ -1,6 +1,6 @@
 import type { BuildingKey, GameState, Nation, Province, Resources, UnitKey } from './types'
 import { BUILDINGS, DIFFICULTIES, TERRAINS, UNIT_ORDER, UNITS } from './data'
-import { armySize, clamp, emptyResources, hasTech, ownedProvinces, totalPopulation } from './helpers'
+import { armySize, clamp, emptyResources, hasTech, luxuryCount, nationHasResource, ownedProvinces, totalPopulation } from './helpers'
 
 export interface ProvinceOutput { food: number; wood: number; iron: number; gold: number; science: number }
 
@@ -15,6 +15,7 @@ export interface Budget {
   buildingGold: number
   foodConsumption: number
   stability: number
+  luxuries: number
 }
 
 export function stabilityFactor(stability: number): number {
@@ -30,6 +31,7 @@ export function computeStability(state: GameState, n: Nation): number {
   const temples = provs.reduce((s, p) => s + p.buildings.temple, 0)
   let v = 85 - avgUnrest * 0.6 - n.warWeariness * 0.5 - (n.taxRate - 20) * 0.5 + Math.min(10, temples * 2)
   if (hasTech(n, 'philosophy')) v += 5
+  if (n.policies.society === 'devout') v += 8
   return clamp(Math.round(v), 0, 100)
 }
 
@@ -38,16 +40,35 @@ export function provinceOutput(state: GameState, p: Province, stability?: number
   const t = TERRAINS[p.terrain]
   const w = p.population / 1000
   const dev = 1 - p.devastation * 0.6
-  const food = w * t.food * (1 + 0.3 * p.buildings.farm) * (hasTech(owner, 'agriculture') ? 1.2 : 1) * dev
-  const wood = w * t.wood * (1 + 0.4 * p.buildings.lumberMill) * dev
-  const iron = w * t.iron * (1 + 0.4 * p.buildings.mine) * dev
+  const pol = owner?.policies
+  let foodMult = (1 + 0.3 * p.buildings.farm) * (hasTech(owner, 'agriculture') ? 1.2 : 1)
+  let woodMult = 1 + 0.4 * p.buildings.lumberMill
+  let ironMult = 1 + 0.4 * p.buildings.mine
+  let goldFlat = 0
+  switch (p.resource) {
+    case 'fertile': foodMult *= 1.25; break
+    case 'fish': foodMult *= 1.2; goldFlat += 2; break
+    case 'timber': woodMult *= 1.5; break
+    case 'ore': ironMult *= 1.5; break
+    case 'horses': foodMult *= 1.1; break
+    case 'gems': case 'spices': case 'wine': goldFlat += 3; break
+  }
+  if (pol?.economy === 'agrarian') foodMult *= 1.15
+  else if (pol?.economy === 'mercantile') foodMult *= 0.92
+  else if (pol?.economy === 'industrious') { foodMult *= 0.95; woodMult *= 1.3; ironMult *= 1.3 }
+  const food = w * t.food * foodMult * dev
+  const wood = w * t.wood * woodMult * dev
+  const iron = w * t.iron * ironMult * dev
   let gold = 0
   let science = 0
   if (owner) {
     const stab = stabilityFactor(stability ?? computeStability(state, owner))
-    const taxes = w * 2.0 * (owner.taxRate / 20) * (1 + 0.25 * p.buildings.market)
+    let taxes = w * 2.0 * (owner.taxRate / 20) * (1 + 0.25 * p.buildings.market)
       * (hasTech(owner, 'currency') ? 1.2 : 1) * (hasTech(owner, 'banking') ? 1.3 : 1)
-    gold = (taxes + w * t.gold) * stab * dev
+    if (pol?.economy === 'mercantile') taxes *= 1.15
+    else if (pol?.economy === 'agrarian') taxes *= 0.9
+    if (pol?.society === 'devout') taxes *= 0.92
+    gold = (taxes + w * t.gold) * stab * dev + goldFlat
     science = p.buildings.university * 3
   }
   return { food, wood, iron, gold, science }
@@ -63,7 +84,8 @@ export function nationBudget(state: GameState, n: Nation): Budget {
   let unitFood = 0
   let buildingGold = 0
   let granaries = 0
-  const logisticsMult = hasTech(n, 'logistics') ? 0.8 : 1
+  let logisticsMult = hasTech(n, 'logistics') ? 0.8 : 1
+  if (n.policies.military === 'drilled') logisticsMult *= 1.2
 
   for (const p of provs) {
     const out = provinceOutput(state, p, stability)
@@ -81,6 +103,8 @@ export function nationBudget(state: GameState, n: Nation): Budget {
     buildingGold += levels * 0.5
     granaries += p.buildings.granary
   }
+  if (n.policies.society === 'scholarly') science = Math.round(science * 1.3)
+  else if (n.policies.society === 'tolerant') science = Math.round(science * 0.85)
   if (!n.isPlayer) income.gold *= DIFFICULTIES[state.difficulty].aiIncome
   const foodConsumption = totalPopulation(state, n.id) / 1000
   upkeep.gold = unitGold + buildingGold
@@ -93,7 +117,7 @@ export function nationBudget(state: GameState, n: Nation): Budget {
   }
   return {
     income, upkeep, net, science, foodCap: 500 + 300 * granaries,
-    unitGold, unitFood, buildingGold, foodConsumption, stability,
+    unitGold, unitFood, buildingGold, foodConsumption, stability, luxuries: luxuryCount(state, n.id),
   }
 }
 
@@ -103,9 +127,12 @@ export function buildingCost(n: Nation, key: BuildingKey): Resources {
   return { gold: Math.ceil(base.gold * m), food: 0, wood: Math.ceil(base.wood * m), iron: Math.ceil(base.iron * m) }
 }
 
-export function unitCost(key: UnitKey, count = 1): Resources {
+export function unitCost(key: UnitKey, count = 1, n?: Nation | null, state?: GameState): Resources {
   const c = UNITS[key].cost
-  return { gold: c.gold * count, food: 0, wood: c.wood * count, iron: c.iron * count }
+  let goldMult = 1
+  if (n?.policies.military === 'levies') goldMult *= 0.75
+  if (key === 'cavalry' && n && state && nationHasResource(state, n.id, 'horses')) goldMult *= 0.8
+  return { gold: Math.ceil(c.gold * goldMult) * count, food: 0, wood: c.wood * count, iron: c.iron * count }
 }
 
 export function canAfford(r: Resources, cost: Resources): boolean {
@@ -142,9 +169,8 @@ export function canRecruit(state: GameState, n: Nation, p: Province, key: UnitKe
   if (UNITS[key].requiresBarracks && p.buildings.barracks < 1) return { ok: false, reason: 'Needs a barracks' }
   const men = UNITS[key].men * count
   if (p.population - men < 500) return { ok: false, reason: 'Not enough people to levy' }
-  const cost = unitCost(key, count)
+  const cost = unitCost(key, count, n, state)
   if (!canAfford(n.resources, cost)) return { ok: false, reason: `Need ${missingResources(n.resources, cost)}` }
-  void state
   return { ok: true, reason: '' }
 }
 

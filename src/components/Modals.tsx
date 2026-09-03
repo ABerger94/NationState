@@ -99,7 +99,7 @@ export function BattleModal({ report: b, onClose }: { report: BattleReport; onCl
 
 export function TurnReportModal({ state, onClose, onShowBattle, onFocus }: { state: GameState; onClose: () => void; onShowBattle: (id: number) => void; onFocus?: (id: number) => void }) {
   const lastTurn = state.turn - 1
-  const entries = state.log.filter((e) => e.turn === lastTurn && e.kind !== 'info')
+  const entries = state.log.filter((e) => e.turn === lastTurn && e.kind !== 'info' && e.important)
   const battles = state.battles.filter((b) => state.lastTurnBattles.includes(b.id))
   return (
     <Modal onClose={onClose}>
