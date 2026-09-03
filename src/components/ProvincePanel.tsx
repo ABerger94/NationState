@@ -9,6 +9,9 @@ import { provinceCapacity } from '../engine/population'
 import { attackPower, defensePower } from '../engine/military'
 import { atWar } from '../engine/diplomacy'
 import { ArmyPicker, Bar, unrestColor } from './common'
+import { YieldsPanel } from './YieldsPanel'
+import { scrollPanelTo } from '../App'
+import { buildingGain, describeGain } from '../engine/yields'
 
 interface Props {
   state: GameState
@@ -56,7 +59,7 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
   useEffect(() => {
     if (attackPreset !== null && targets.includes(attackPreset)) {
       setAttackTo(attackPreset)
-      setTimeout(() => document.getElementById('sec-attack')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+      setTimeout(() => scrollPanelTo('sec-attack'), 60)
     }
   }, [attackPreset, targets])
 
@@ -106,9 +109,7 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
           <dt>Population</dt><dd>{fmt(p.population)} <span className="muted">/ {fmt(cap)}</span></dd>
           <dt>Unrest</dt><dd style={{ color: unrestColor(p.unrest) }}>{Math.round(p.unrest)}</dd>
           {p.devastation > 0.01 && <><dt>Devastation</dt><dd className="bad">{Math.round(p.devastation * 100)}%</dd></>}
-          <dt>Food</dt><dd>{out.food.toFixed(1)} <span className="muted">(eats {(p.population / 1000).toFixed(1)})</span></dd>
-          <dt>Wood / Iron</dt><dd>{out.wood.toFixed(1)} / {out.iron.toFixed(1)}</dd>
-          {owner && <><dt>Taxes</dt><dd>{out.gold.toFixed(1)} gold</dd></>}
+          <dt>Food balance</dt><dd className={out.food - p.population / 1000 >= 0 ? 'ok' : 'bad'}>{(out.food - p.population / 1000 >= 0 ? '+' : '') + (out.food - p.population / 1000).toFixed(1)} <span className="muted">(makes {out.food.toFixed(1)}, eats {(p.population / 1000).toFixed(1)})</span></dd>
           <dt>Terrain</dt><dd>defence ×{t.defense} · cavalry ×{t.cavalry}</dd>
           {p.resource && <><dt>Resource</dt><dd title={RESOURCES[p.resource].description}><span style={{ color: RESOURCES[p.resource].color }}>{RESOURCES[p.resource].glyph}</span> {RESOURCES[p.resource].name}</dd></>}
         </dl>
@@ -128,6 +129,9 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
         </div>
       )}
 
+      <h3 id="sec-yields">Yields</h3>
+      <YieldsPanel state={state} province={p} player={player} mine={mine} dispatch={dispatch} />
+
       <h3 id="sec-build">Buildings</h3>
       <table className="tbl">
         <tbody>
@@ -137,9 +141,11 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
             if (!mine && lvl === 0) return null
             const check = mine ? canBuild(state, player, p, b) : { ok: false, reason: '' }
             const cost = buildingCost(player, b)
+            const gain = mine && lvl < def.max ? buildingGain(state, p, b) : null
+            const gainText = gain ? [describeGain(gain.yields), gain.note].filter(Boolean).join(' · ') : ''
             return (
               <tr key={b}>
-                <td title={def.description}><b>{def.name}</b> <span className="muted">{lvl}/{def.max}</span><div className="muted small">{def.description}</div></td>
+                <td title={def.description}><b>{def.name}</b> <span className="muted">{lvl}/{def.max}</span>{gainText && <div className="gain small">Next level: {gainText}</div>}<div className="muted small">{def.description}</div></td>
                 {mine && (
                   <td className="num" style={{ whiteSpace: 'nowrap' }}>
                     <div className="muted small">{costText(cost)}</div>

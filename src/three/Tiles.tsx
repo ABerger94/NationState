@@ -14,6 +14,7 @@ interface TileProps {
   target: boolean
   highlight: boolean
   armed?: boolean
+  modeColor?: string | null
   interactive: boolean
   onSelect: (id: number) => void
   onHover: (id: number | null) => void
@@ -35,17 +36,18 @@ function Ring({ y, color, speed = 3, wide = false }: { y: number; color: string;
   )
 }
 
-export function Tile({ p, state, height, selected, hovered, target, highlight, armed = false, interactive, onSelect, onHover }: TileProps) {
+export function Tile({ p, state, height, selected, hovered, target, highlight, armed = false, modeColor = null, interactive, onSelect, onHover }: TileProps) {
   const [x, z] = tilePosition(p.col, p.row)
   const owner = p.ownerId === null ? null : state.nations[p.ownerId]
   const ownerColor = owner?.color ?? null
   const isMine = !!owner?.isPlayer
   const topHex = useMemo(() => {
+    if (modeColor) return modeColor
     let c = TERRAIN_TOP[p.terrain]
     if (ownerColor) c = mixHex(c, ownerColor, isMine ? 0.58 : 0.42)
     if (p.devastation > 0.02) c = mixHex(c, '#3a2a20', Math.min(0.6, p.devastation * 0.7))
     return c
-  }, [p.terrain, ownerColor, p.devastation, isMine])
+  }, [p.terrain, ownerColor, p.devastation, isMine, modeColor])
   const targetColor = useMemo(() => new THREE.Color(topHex), [topHex])
   const topMat = useRef<THREE.MeshStandardMaterial>(null)
   const first = useRef(true)

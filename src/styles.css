@@ -169,7 +169,7 @@ label.field, .field-label { display: flex; flex-direction: column; gap: 5px; fon
 .adv-dot.warn, .adv.warn .adv-dot { background: var(--warn); }
 .adv-dot.info, .adv.info .adv-dot { background: var(--info); }
 .adv-dot.tip, .adv.tip .adv-dot { background: var(--ok); }
-.legend-3d { position: absolute; right: calc(min(440px, 42vw) + 56px); top: 10px; z-index: 8; background: var(--glass); backdrop-filter: blur(14px); border: 1px solid var(--border); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 2px; box-shadow: var(--shadow); }
+.legend-3d { position: absolute; right: calc(min(440px, 42vw) + 56px); top: 58px; z-index: 8; background: var(--glass); backdrop-filter: blur(14px); border: 1px solid var(--border); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 2px; box-shadow: var(--shadow); }
 .side.closed ~ .legend-3d { right: 56px; }
 .legend-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 8px; background: none; border: none; color: var(--text); font-size: 12px; cursor: pointer; text-align: left; font-family: var(--font); }
 .legend-row:hover { background: rgba(255,255,255,.06); }
@@ -319,6 +319,31 @@ label.field, .field-label { display: flex; flex-direction: column; gap: 5px; fon
 button:focus:not(:focus-visible) { outline: none; }
 @media (max-width: 900px) { .help-grid { grid-template-columns: 1fr; } .menu { right: 8px; } }
 
+/* ---------- yields, ledger, map modes ---------- */
+.yields-tbl td, .yields-tbl th { padding: 5px 4px; }
+.yield-name { display: inline-flex; align-items: center; gap: 5px; text-transform: capitalize; }
+.yield-name svg { width: 14px; height: 14px; }
+.y-food { color: #9bd54a; } .y-wood { color: #d08a45; } .y-iron { color: #c2ccd8; } .y-gold { color: var(--accent); } .y-science { color: var(--info); }
+.quality { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; padding: 1px 6px; border-radius: 6px; border: 1px solid currentColor; }
+.quality.rich { color: var(--ok); } .quality.fair { color: var(--warn); } .quality.poor { color: var(--muted); }
+.gain { color: var(--ok); font-weight: 600; }
+.land-note { margin: 8px 0; line-height: 1.5; }
+.suggestion { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(76, 211, 128, .07); border: 1px solid rgba(76, 211, 128, .3); }
+.ledger-wrap { overflow-x: auto; }
+.ledger { font-size: 12px; white-space: nowrap; }
+.ledger td, .ledger th { padding: 4px 5px; }
+.ledger tr.total td { border-top: 1px solid var(--border-strong); }
+.hc-yields { display: flex; gap: 8px; margin-top: 6px; font-size: 12px; font-weight: 600; }
+.mapmodes { position: absolute; top: 10px; left: calc(354px + (100% - 354px - min(440px, 42vw) - 12px) / 2); transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 12px; background: var(--glass); backdrop-filter: blur(14px); border: 1px solid var(--border); box-shadow: var(--shadow); }
+.side.closed ~ .mapmodes { left: calc(354px + (100% - 354px - 12px) / 2); }
+.mapmode { display: flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 8px; border: 1px solid transparent; background: none; color: var(--muted); font-size: 12px; cursor: pointer; font-family: var(--font); }
+.mapmode:hover { color: var(--text); background: rgba(255,255,255,.05); }
+.mapmode.active { background: rgba(255,255,255,.06); font-weight: 600; }
+.mm-glyph { font-size: 13px; }
+.mm-hint { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 6px; font-size: 11px; color: var(--muted); white-space: nowrap; background: var(--glass); border: 1px solid var(--border); border-radius: 8px; padding: 2px 8px; pointer-events: none; }
+.badge.mode { background: rgba(10, 14, 24, 0.85); border-color: rgba(255,255,255,.35); font-size: 13px; padding: 2px 8px; }
+.badge.mode-food .units { color: #9bd54a; } .badge.mode-wood .units { color: #e0a060; } .badge.mode-iron .units { color: #dbe3ec; } .badge.mode-gold .units { color: var(--accent); } .badge.mode-unrest .units { color: #ff8a80; }
+
 /* ---------- mobile (must stay last so it wins) ---------- */
 @media (max-width: 900px) {
   /* header: one compact row plus a slim resource strip */
@@ -374,7 +399,13 @@ button:focus:not(:focus-visible) { outline: none; }
   .qb-odds { font-size: 12px; gap: 8px; }
   .qb-odds .small { display: none; }
 
-  .toasts { top: 6px; bottom: auto; left: 6px; right: 6px; transform: none; align-items: stretch; }
+  .toasts { top: 52px; bottom: auto; left: 6px; right: 6px; transform: none; align-items: stretch; }
+  .mapmodes { top: 8px; left: 50%; transform: translateX(-50%); padding: 3px; gap: 0; }
+  .side.closed ~ .mapmodes { left: calc(354px + (100% - 354px - 12px) / 2); }
+  .mapmode { padding: 6px 8px; }
+  .mm-label, .mm-hint { display: none; }
+  .mapmode.active .mm-label { display: inline; }
+  .suggestion { flex-direction: column; align-items: flex-start; }
   .toast { font-size: 12px; padding: 6px 10px; max-width: none; }
   .toasts .toast:nth-child(n+3) { display: none; }
   .year-text { font-size: 34px; }

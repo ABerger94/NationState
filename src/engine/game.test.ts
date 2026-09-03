@@ -167,3 +167,23 @@ describe('objectives, edicts and migration', () => {
     expect(m.nations[0].color).toBe('#3d8bff')
   })
 })
+
+describe('yields', () => {
+  it('reports what a farm adds and recommends a production building', async () => {
+    const { buildingGain, suggestBuilding, yieldPer1k, landQuality, mapModeTile } = await import('./yields')
+    const s = newGame()
+    const player = playerNation(s)
+    const cap = s.provinces[player.capitalId]
+    const gain = buildingGain(s, cap, 'farm')
+    expect(gain.yields.food ?? 0).toBeGreaterThan(0)
+    const sug = suggestBuilding(s, player, cap)
+    expect(sug).not.toBeNull()
+    expect(['farm', 'lumberMill', 'mine', 'market', 'university']).toContain(sug!.key)
+    const a = yieldPer1k(s, cap)
+    const b = yieldPer1k(s, { ...cap, population: 5000 })
+    expect(a.food).toBeCloseTo(b.food, 5)
+    expect(['rich', 'fair', 'poor']).toContain(landQuality(cap).food)
+    expect(mapModeTile(s, cap, 'realm')).toBeNull()
+    expect(mapModeTile(s, cap, 'food')!.label).toMatch(/^\d+\.\d$/)
+  })
+})
