@@ -1,5 +1,6 @@
-import type { Army, BuildingKey, Difficulty, GameState, TechKey, UnitKey } from './types'
-import { TECHS, TRADE_PRICES, UNITS } from './data'
+import type { Army, BuildingKey, Difficulty, EconomyPolicy, GameState, MilitaryPolicy, PolicyCategory, SocietyPolicy, TechKey, UnitKey } from './types'
+import { POLICY_CHANGE_COST, POLICY_COOLDOWN, TECHS, TRADE_PRICES, UNITS } from './data'
+import { checkObjectives } from './objectives'
 import { armyFits, armySize, cloneState, hexDistance, log, playerNation, subArmy, addArmy } from './helpers'
 import { buildingCost, canBuild, canRecruit, pay, transferCost, unitCost } from './economy'
 import { aiAcceptsAlliance, aiAcceptsPeace, atWar, breakAlliance, changeRelation, declareWar, formAlliance, makePeace } from './diplomacy'
@@ -26,6 +27,7 @@ export type Action =
   | { type: 'BREAK_ALLIANCE'; target: number }
   | { type: 'RESOLVE_EVENT'; choice: number }
   | { type: 'TRADE'; resource: 'food' | 'wood' | 'iron'; amount: number; direction: 'sell' | 'buy' }
+  | { type: 'SET_POLICY'; category: PolicyCategory; value: EconomyPolicy | MilitaryPolicy | SocietyPolicy }
   | { type: 'END_TURN' }
   | { type: 'QUIT' }
 
@@ -55,6 +57,16 @@ export function canTransfer(state: GameState, fromId: number, toId: number, army
   return { ok: true, reason: '', cost }
 }
 
+export function canChangePolicy(state: GameState, category: PolicyCategory): { ok: boolean; reason: string; cost: number } {
+  const player = playerNation(state)
+  const firstPick = player.policies[category] === null
+  const cost = firstPick ? 0 : POLICY_CHANGE_COST
+  const wait = POLICY_COOLDOWN - (state.turn - player.policies.changedTurn)
+  if (!firstPick && wait > 0) return { ok: false, reason: `The court needs ${wait} more turn${wait === 1 ? '' : 's'} before another edict`, cost }
+  if (player.resources.gold < cost) return { ok: false, reason: `Changing an edict costs ${cost} gold`, cost }
+  return { ok: true, reason: '', cost }
+}
+
 export function reducer(state: GameState | null, action: Action): GameState | null {
   if (action.type === 'NEW_GAME') return createGame(action)
   if (action.type === 'LOAD') return action.state
@@ -63,6 +75,12 @@ export function reducer(state: GameState | null, action: Action): GameState | nu
   if (action.type === 'END_TURN') return endTurn(state)
   if (state.gameOver) return state
 
+  const next = applyAction(state, action)
+  if (next !== state && next) checkObjectives(next)
+  return next
+}
+
+function applyAction(state: GameState, action: Action): GameState | null {
   const s = cloneState(state)
   const player = playerNation(s)
 
@@ -72,14 +90,16 @@ export function reducer(state: GameState | null, action: Action): GameState | nu
       if (!canBuild(s, player, p, action.building).ok) return state
       pay(player, buildingCost(player, action.building))
       p.buildings[action.building] += 1
+      player.stats.built += 1
       return s
     }
     case 'RECRUIT': {
       const p = s.provinces[action.provinceId]
       if (!canRecruit(s, player, p, action.unit, action.count).ok) return state
-      pay(player, unitCost(action.unit, action.count))
+      pay(player, unitCost(action.unit, action.count, player, s))
       p.population -= UNITS[action.unit].men * action.count
       p.garrison[action.unit] += action.count
+      player.stats.recruited += action.count
       return s
     }
     case 'DISBAND': {
@@ -121,6 +141,15 @@ export function reducer(state: GameState | null, action: Action): GameState | nu
         r.gold -= cost
         r[action.resource] += amount
       }
+      return s
+    }
+    case 'SET_POLICY': {
+      if (player.policies[action.category] === action.value) return state
+      const check = canChangePolicy(s, action.category)
+      if (!check.ok) return state
+      player.resources.gold -= check.cost
+      if (player.policies[action.category] !== null) player.policies.changedTurn = s.turn
+      ;(player.policies as unknown as Record<string, string | number | null>)[action.category] = action.value
       return s
     }
     case 'SET_TAX':

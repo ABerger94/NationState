@@ -1,8 +1,8 @@
-import type { Difficulty, GameState, Nation, Province, Terrain } from './types'
+import type { Difficulty, GameState, Nation, Province, ResourceKind, Terrain } from './types'
 import {
-  AI_NATIONS, COLS, DIFFICULTIES, NAME_PARTS, NATION_COUNT, PLAYER_COLOR, ROWS, START_YEAR, TERRAINS,
+  AI_NATIONS, COLS, DIFFICULTIES, NAME_PARTS, NATION_COUNT, PLAYER_COLOR, RESOURCES, RESOURCE_ORDER, ROWS, START_YEAR, TERRAINS,
 } from './data'
-import { emptyArmy, log } from './helpers'
+import { defaultPolicies, emptyArmy, emptyStats, log } from './helpers'
 import { nextRand, pick, randInt, shuffle } from './rng'
 
 const TERRAIN_KEYS = Object.keys(TERRAINS) as Terrain[]
@@ -74,7 +74,7 @@ export function createGame(opts: { seed: number; playerName: string; difficulty:
   const state: GameState = {
     version: 1, seed, rng: seed, turn: 1, startYear: START_YEAR, difficulty: opts.difficulty,
     cols: COLS, rows: ROWS, provinces: [], nations: [], log: [], battles: [], nextId: 1,
-    pendingEvent: null, lastTurnBattles: [], winner: null, gameOver: false, gameOverReason: null,
+    pendingEvent: null, lastTurnBattles: [], winner: null, gameOver: false, gameOverReason: null, objectives: [],
   }
   const used = new Set<string>()
 
@@ -85,7 +85,7 @@ export function createGame(opts: { seed: number; playerName: string; difficulty:
       const id = state.provinces.length
       const pop = Math.round(randInt(state, 1500, 5000) * (terrain === 'mountains' ? 0.6 : 1))
       state.provinces.push({
-        id, name: makeName(state, used), col, row, terrain, ownerId: null, population: pop,
+        id, name: makeName(state, used), col, row, terrain, resource: null, ownerId: null, population: pop,
         unrest: 0, devastation: 0, buildings: emptyBuildings(),
         garrison: { ...emptyArmy(), militia: Math.max(1, Math.round(pop / 1200)) },
         neighbors: [], conqueredTurn: null, lockedTurn: 0, isCapital: false,
@@ -94,6 +94,10 @@ export function createGame(opts: { seed: number; playerName: string; difficulty:
   }
   for (const p of state.provinces) {
     p.neighbors = hexNeighbors(p.col, p.row).map(([c, r]) => r * COLS + c)
+    if (nextRand(state) < 0.3) {
+      const options: ResourceKind[] = RESOURCE_ORDER.filter((k) => RESOURCES[k].terrains.includes(p.terrain))
+      if (options.length) p.resource = pick(state, options)
+    }
   }
 
   const diff = DIFFICULTIES[opts.difficulty]
@@ -114,7 +118,7 @@ export function createGame(opts: { seed: number; playerName: string; difficulty:
       resources: { gold: Math.round(300 * bonus), food: Math.round(250 * bonus), wood: Math.round(120 * bonus), iron: Math.round(60 * bonus) },
       taxRate: 20, warWeariness: 0, techs: [], research: null, researchProgress: 0,
       relations: {}, wars: [], allies: [], peaceOffersFrom: [], capitalId: 0,
-      provincesLost: 0, provincesGained: 0,
+      provincesLost: 0, provincesGained: 0, policies: defaultPolicies(), stats: emptyStats(),
     }
     state.nations.push(nation)
 

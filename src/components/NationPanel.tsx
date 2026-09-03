@@ -1,6 +1,6 @@
-import type { GameState, TechKey } from '../engine/types'
-import type { Action } from '../engine/actions'
-import { PERSONALITIES, TECHS, TECH_ORDER, TRADE_PRICES } from '../engine/data'
+import type { GameState, PolicyCategory, TechKey } from '../engine/types'
+import { canChangePolicy, type Action } from '../engine/actions'
+import { CONQUEST_SHARE, MAX_TURNS, PERSONALITIES, POLICIES, TECHS, TECH_ORDER, TRADE_PRICES } from '../engine/data'
 import { armyPower, armySize, fmt, fmtSigned, nationArmy, ownedProvinces, playerNation, totalPopulation } from '../engine/helpers'
 import { nationBudget, nationScore } from '../engine/economy'
 import { availableTechs } from '../engine/ai'
@@ -21,8 +21,44 @@ export function NationPanel({ state, dispatch }: Props) {
     army: armySize(nationArmy(state, n.id)), power: Math.round(armyPower(nationArmy(state, n.id))), score: nationScore(state, n),
   })).sort((a, b) => b.score - a.score)
 
+  const conquest = ownedProvinces(state, player.id).length / state.provinces.length
+  const myRank = ranking.findIndex((r) => r.n.isPlayer) + 1
+  const categories: PolicyCategory[] = ['economy', 'military', 'society']
+
   return (
     <div>
+      <h3>Victory</h3>
+      <div className="card">
+        <div className="row between small"><span>Conquest: {ownedProvinces(state, player.id).length} of {Math.ceil(state.provinces.length * CONQUEST_SHARE)} provinces needed</span><b>{Math.round((conquest / CONQUEST_SHARE) * 100)}%</b></div>
+        <Bar value={conquest} max={CONQUEST_SHARE} color="var(--accent)" />
+        <div className="row between small" style={{ marginTop: 8 }}><span>Score: rank {myRank} of {ranking.length}</span><span className="muted">{MAX_TURNS - state.turn} turns remain</span></div>
+        <div className="muted small">Win by holding {Math.round(CONQUEST_SHARE * 100)}% of the map, destroying every rival, or leading the score at turn {MAX_TURNS}.</div>
+      </div>
+
+      <h3>Edicts</h3>
+      <p className="muted small">One edict per sphere shapes how your realm works. The first choice in each sphere is free; changing it later costs 60 gold and needs five turns between changes.</p>
+      {categories.map((cat) => {
+        const current = player.policies[cat]
+        const check = canChangePolicy(state, cat)
+        const defs = POLICIES[cat] as Record<string, { name: string; description: string }>
+        return (
+          <div key={cat} className="edict-group">
+            <div className="edict-cat">{cat}{current === null && <span className="warn"> · none chosen</span>}</div>
+            <div className="edict-options">
+              {Object.keys(defs).map((key) => {
+                const active = current === key
+                return (
+                  <button key={key} className={'edict' + (active ? ' active' : '')} disabled={!active && !check.ok} title={active ? 'Current edict' : check.reason} onClick={() => !active && dispatch({ type: 'SET_POLICY', category: cat, value: key as never })}>
+                    <b>{defs[key].name}</b>
+                    <span className="muted small">{defs[key].description}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+
       <h3>Treasury</h3>
       <table className="tbl">
         <thead><tr><th></th><th className="num">Income</th><th className="num">Upkeep</th><th className="num">Net</th></tr></thead>
@@ -38,7 +74,7 @@ export function NationPanel({ state, dispatch }: Props) {
         </tbody>
       </table>
       <p className="muted small" style={{ marginTop: 6 }}>
-        Troops cost {fmt(budget.unitGold)} gold and buildings {fmt(budget.buildingGold)} gold per turn. {fmt(totalPopulation(state, player.id))} people eat {fmt(budget.foodConsumption)} food per turn. Food storage caps at {budget.foodCap}.
+        {budget.luxuries > 0 && <>{budget.luxuries} luxury {budget.luxuries === 1 ? 'good' : 'goods'} soothe unrest by {budget.luxuries} per turn everywhere. </>}Troops cost {fmt(budget.unitGold)} gold and buildings {fmt(budget.buildingGold)} gold per turn. {fmt(totalPopulation(state, player.id))} people eat {fmt(budget.foodConsumption)} food per turn. Food storage caps at {budget.foodCap}.
       </p>
 
       <h3>Market</h3>

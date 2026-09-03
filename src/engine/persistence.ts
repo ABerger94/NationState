@@ -1,5 +1,6 @@
 import type { GameState } from './types'
-import { SAVE_KEY } from './data'
+import { AI_NATIONS, PLAYER_COLOR, SAVE_KEY } from './data'
+import { defaultPolicies, emptyStats } from './helpers'
 
 export function saveGame(state: GameState | null): void {
   try {
@@ -10,13 +11,33 @@ export function saveGame(state: GameState | null): void {
   }
 }
 
+/** Brings saves from earlier versions up to the current shape. */
+export function migrate(raw: GameState): GameState {
+  const s = raw
+  s.objectives ??= []
+  for (const n of s.nations) {
+    n.policies ??= defaultPolicies()
+    n.stats ??= emptyStats()
+    if (n.isPlayer) n.color = PLAYER_COLOR
+    else {
+      const def = AI_NATIONS.find((d) => d.name === n.name)
+      if (def) n.color = def.color
+    }
+  }
+  for (const p of s.provinces) p.resource ??= null
+  for (const e of s.log) e.important ??= true
+  s.version = 2
+  return s
+}
+
 export function loadGame(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as GameState
-    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.provinces)) return null
-    return parsed
+    if (!parsed || !Array.isArray(parsed.provinces) || !Array.isArray(parsed.nations)) return null
+    if (parsed.version !== 1 && parsed.version !== 2) return null
+    return migrate(parsed)
   } catch {
     return null
   }

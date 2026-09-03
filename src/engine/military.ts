@@ -1,11 +1,12 @@
 import type { Army, BattleReport, GameState, Nation, Province, Terrain } from './types'
 import { TERRAINS, UNIT_ORDER, UNITS } from './data'
-import { addArmy, armySize, clamp, describeArmy, emptyArmy, hasTech, log, ownedProvinces, subArmy } from './helpers'
+import { addArmy, armySize, clamp, describeArmy, emptyArmy, hasTech, log, nationHasResource, ownedProvinces, subArmy } from './helpers'
 import { computeStability } from './economy'
 import { nextRand, pick } from './rng'
 
-export function attackPower(army: Army, n: Nation | null, terrain: Terrain, round: number): number {
+export function attackPower(army: Army, n: Nation | null, terrain: Terrain, round: number, state?: GameState): number {
   const t = TERRAINS[terrain]
+  const horses = !!(n && state && nationHasResource(state, n.id, 'horses'))
   let total = 0
   for (const k of UNIT_ORDER) {
     const c = army[k]
@@ -14,6 +15,7 @@ export function attackPower(army: Army, n: Nation | null, terrain: Terrain, roun
     if (k === 'cavalry') {
       a *= t.cavalry
       if (hasTech(n, 'horsemanship')) a *= 1.2
+      if (horses) a *= 1.1
     } else if (k === 'archers') {
       if (round === 1) a *= 1.6
       if (terrain === 'forest') a *= 1.15
@@ -24,6 +26,8 @@ export function attackPower(army: Army, n: Nation | null, terrain: Terrain, roun
   }
   if (hasTech(n, 'ironWorking')) total *= 1.15
   if (hasTech(n, 'professionalArmy')) total *= 1.1
+  if (n?.policies.military === 'levies') total *= 0.9
+  else if (n?.policies.military === 'expansionist') total *= 1.1
   return total
 }
 
@@ -38,6 +42,7 @@ export function defensePower(army: Army, n: Nation | null, p: Province, attacker
   total *= 1 + 0.08 * p.buildings.barracks
   if (hasTech(n, 'tactics')) total *= 1.1
   if (hasTech(n, 'professionalArmy')) total *= 1.1
+  if (n?.policies.military === 'drilled') total *= 1.1
   return total
 }
 
@@ -83,7 +88,7 @@ export function resolveBattle(state: GameState, args: BattleArgs): BattleReport 
   if (armySize(atk) === 0) winner = 'defender'
 
   for (let r = 1; r <= 8 && winner === null; r++) {
-    const A = attackPower(atk, an, args.province.terrain, r)
+    const A = attackPower(atk, an, args.province.terrain, r, state)
     const D = defensePower(def, dn, args.province, atk.siege)
     if (A + D <= 0) break
     const aFrac = clamp((D / (A + D)) * 0.3 * (0.8 + 0.4 * nextRand(state)), 0, 0.9)
@@ -157,7 +162,13 @@ export function transferOwnership(state: GameState, p: Province, newOwner: numbe
   p.devastation = Math.min(1, p.devastation + 0.3)
   p.population = Math.max(300, Math.round(p.population * 0.93))
   p.unrest = prevOwner === null ? 35 : 60
-  if (newOwner !== null) state.nations[newOwner].provincesGained += 1
+  if (newOwner !== null) {
+    const winner = state.nations[newOwner]
+    winner.provincesGained += 1
+    if (winner.policies.military === 'expansionist') p.unrest += 10
+    if (prevOwner === null) winner.stats.tribalConquests += 1
+    else winner.stats.nationConquests += 1
+  }
   if (prevOwner !== null) {
     state.nations[prevOwner].provincesLost += 1
     if (p.isCapital) {
@@ -202,6 +213,7 @@ export function performAttack(state: GameState, attackerId: number, fromId: numb
     }
     transferOwnership(state, to, attackerId, report.attackerEnd)
     report.conquered = true
+    attacker.stats.battlesWon += 1
     attacker.warWeariness = Math.min(100, attacker.warWeariness + 1)
     if (defender) {
       defender.warWeariness = Math.min(100, defender.warWeariness + 6)
@@ -217,7 +229,11 @@ export function performAttack(state: GameState, attackerId: number, fromId: numb
     from.garrison = addArmy(from.garrison, report.attackerEnd)
     to.garrison = { ...report.defenderEnd }
     attacker.warWeariness = Math.min(100, attacker.warWeariness + 4)
-    if (defender) defender.warWeariness = Math.min(100, defender.warWeariness + 2)
+    if (defender) {
+      defender.warWeariness = Math.min(100, defender.warWeariness + 2)
+      defender.stats.defensiveWins += 1
+      defender.stats.battlesWon += 1
+    }
     log(state, 'battle', `${attacker.name} assaults ${to.name} (${report.defenderName}) with ${describeArmy(army)} and is repulsed.`)
   }
   recordBattle(state, report)

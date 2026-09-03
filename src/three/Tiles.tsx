@@ -13,6 +13,7 @@ interface TileProps {
   hovered: boolean
   target: boolean
   highlight: boolean
+  armed?: boolean
   interactive: boolean
   onSelect: (id: number) => void
   onHover: (id: number | null) => void
@@ -34,16 +35,17 @@ function Ring({ y, color, speed = 3, wide = false }: { y: number; color: string;
   )
 }
 
-export function Tile({ p, state, height, selected, hovered, target, highlight, interactive, onSelect, onHover }: TileProps) {
+export function Tile({ p, state, height, selected, hovered, target, highlight, armed = false, interactive, onSelect, onHover }: TileProps) {
   const [x, z] = tilePosition(p.col, p.row)
   const owner = p.ownerId === null ? null : state.nations[p.ownerId]
   const ownerColor = owner?.color ?? null
+  const isMine = !!owner?.isPlayer
   const topHex = useMemo(() => {
     let c = TERRAIN_TOP[p.terrain]
-    if (ownerColor) c = mixHex(c, ownerColor, 0.45)
+    if (ownerColor) c = mixHex(c, ownerColor, isMine ? 0.58 : 0.42)
     if (p.devastation > 0.02) c = mixHex(c, '#3a2a20', Math.min(0.6, p.devastation * 0.7))
     return c
-  }, [p.terrain, ownerColor, p.devastation])
+  }, [p.terrain, ownerColor, p.devastation, isMine])
   const targetColor = useMemo(() => new THREE.Color(topHex), [topHex])
   const topMat = useRef<THREE.MeshStandardMaterial>(null)
   const first = useRef(true)
@@ -53,7 +55,7 @@ export function Tile({ p, state, height, selected, hovered, target, highlight, i
     if (!m) return
     if (first.current) { m.color.copy(targetColor); first.current = false }
     else m.color.lerp(targetColor, Math.min(1, dt * 3.5))
-    const want = hovered ? 0.28 : 0
+    const want = armed ? 0.5 : hovered ? 0.28 : 0
     m.emissiveIntensity = THREE.MathUtils.lerp(m.emissiveIntensity, want, Math.min(1, dt * 12))
   })
 
@@ -75,7 +77,8 @@ export function Tile({ p, state, height, selected, hovered, target, highlight, i
         <meshStandardMaterial attach="material-2" color={side} />
       </mesh>
       {selected && <Ring y={height + 0.03} color="#ffffff" />}
-      {target && !selected && <Ring y={height + 0.03} color="#ff4d4d" speed={5} />}
+      {armed && <Ring y={height + 0.04} color="#ff2d2d" speed={9} wide />}
+      {target && !selected && !armed && <Ring y={height + 0.03} color="#ff4d4d" speed={5} />}
       {highlight && !selected && <Ring y={height + 0.03} color="#5ad1ff" speed={4} />}
     </group>
   )
@@ -91,11 +94,12 @@ export function Borders({ state, heights }: { state: GameState; heights: number[
   const signature = state.provinces.map((p) => p.ownerId ?? '-').join(',') + '|' + state.nations.map((n) => n.color).join(',')
 
   const segments = useMemo(() => {
-    const out: Array<{ x: number; y: number; z: number; rot: number; color: string }> = []
+    const out: Array<{ x: number; y: number; z: number; rot: number; color: string; mine: boolean }> = []
     const positions = state.provinces.map((p) => tilePosition(p.col, p.row))
     for (const p of state.provinces) {
       if (p.ownerId === null) continue
       const color = state.nations[p.ownerId].color
+      const mine = state.nations[p.ownerId].isPlayer
       const [cx, cz] = positions[p.id]
       for (let k = 0; k < 6; k++) {
         const a = Math.PI / 2 + (k * Math.PI) / 3 + Math.PI / 6
@@ -109,32 +113,46 @@ export function Borders({ state, heights }: { state: GameState; heights: number[
         let mz = (az + bz) / 2
         mx *= 0.93
         mz *= 0.93
-        out.push({ x: cx + mx, y: heights[p.id] + 0.025, z: cz + mz, rot: -Math.atan2(bz - az, bx - ax), color })
+        out.push({ x: cx + mx, y: heights[p.id] + 0.025, z: cz + mz, rot: -Math.atan2(bz - az, bx - ax), color, mine })
       }
     }
     return out
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature, heights])
 
-  useLayoutEffect(() => {
-    const mesh = ref.current
+  const others = useMemo(() => segments.filter((s) => !s.mine), [segments])
+  const mine = useMemo(() => segments.filter((s) => s.mine), [segments])
+  const mineRef = useRef<THREE.InstancedMesh>(null)
+  const mineMat = useRef<THREE.MeshStandardMaterial>(null)
+
+  const fill = (mesh: THREE.InstancedMesh | null, list: typeof segments, sy: number, sz: number) => {
     if (!mesh) return
-    segments.forEach((s, i) => {
-      tmpObj.position.set(s.x, s.y, s.z)
+    list.forEach((s, i) => {
+      tmpObj.position.set(s.x, s.y + (sy - 0.05) / 2, s.z)
       tmpObj.rotation.set(0, s.rot, 0)
-      tmpObj.scale.set(0.9, 0.05, 0.1)
+      tmpObj.scale.set(0.9, sy, sz)
       tmpObj.updateMatrix()
       mesh.setMatrixAt(i, tmpObj.matrix)
       mesh.setColorAt(i, tmpColor.set(s.color))
     })
-    mesh.count = segments.length
+    mesh.count = list.length
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-  }, [segments])
+  }
+  useLayoutEffect(() => { fill(ref.current, others, 0.05, 0.1) }, [others])
+  useLayoutEffect(() => { fill(mineRef.current, mine, 0.1, 0.16) }, [mine])
+  useFrame(({ clock }) => {
+    if (mineMat.current) mineMat.current.emissiveIntensity = 0.45 + 0.35 * Math.sin(clock.getElapsedTime() * 2.2)
+  })
 
   return (
-    <instancedMesh ref={ref} args={[GEO.box, undefined, max]} count={segments.length} frustumCulled={false}>
-      <meshStandardMaterial roughness={0.5} emissive="#ffffff" emissiveIntensity={0.12} />
-    </instancedMesh>
+    <group>
+      <instancedMesh ref={ref} args={[GEO.box, undefined, max]} count={others.length} frustumCulled={false}>
+        <meshStandardMaterial roughness={0.5} emissive="#ffffff" emissiveIntensity={0.12} />
+      </instancedMesh>
+      <instancedMesh ref={mineRef} args={[GEO.box, undefined, max]} count={mine.length} frustumCulled={false}>
+        <meshStandardMaterial ref={mineMat} roughness={0.35} emissive="#ffffff" emissiveIntensity={0.5} />
+      </instancedMesh>
+    </group>
   )
 }

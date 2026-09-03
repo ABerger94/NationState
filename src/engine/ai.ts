@@ -108,7 +108,7 @@ function aiRecruit(state: GameState, n: Nation) {
       else if (r < 0.8) unit = 'archers'
       else unit = 'cavalry'
     }
-    const cost = unitCost(unit)
+    const cost = unitCost(unit, 1, n, state)
     const minReserve = atWarNow ? pers.reserve * 0.5 : pers.reserve
     if (!canAfford(n.resources, cost) || n.resources.gold - cost.gold < minReserve) break
     if (budget.net.gold - UNITS[unit].upkeepGold < -2) break
@@ -141,7 +141,10 @@ function aiDiplomacy(state: GameState, n: Nation) {
   const myPower = armyPower(nationArmy(state, n.id))
   const easyPrey = state.nations.some((o) => o.alive && o.id !== n.id && !atWar(n, o) && !n.allies.includes(o.id)
     && bordersNation(state, n.id, o.id) && myPower > armyPower(nationArmy(state, o.id)) * 2.5)
-  const warChance = pers.aggression * 0.08 * (landLocked ? 2 : 1) * (easyPrey ? 2 : 1)
+  const player = state.nations.find((o) => o.isPlayer)!
+  const richWeakPlayer = player.alive && !atWar(n, player) && bordersNation(state, n.id, player.id)
+    && player.resources.gold > 400 && myPower > armyPower(nationArmy(state, player.id)) * 1.8
+  const warChance = pers.aggression * 0.08 * (landLocked ? 2 : 1) * (easyPrey ? 2 : 1) * (richWeakPlayer ? 1.5 : 1) * (state.difficulty === 'hard' ? 1.3 : state.difficulty === 'easy' ? 0.6 : 1)
   if (n.wars.length < maxWars && n.warWeariness < 20 && nextRand(state) < warChance) {
     const needed = n.personality === 'aggressive' ? 1.15 : 1.3
     const targets = state.nations.filter((o) =>
@@ -201,7 +204,7 @@ function aiAttack(state: GameState, n: Nation) {
     let best: { p: Province; ratio: number } | null = null
     for (const t of targets) {
       const owner = t.ownerId === null ? null : state.nations[t.ownerId]
-      const mine = attackPower(force, n, t.terrain, 2)
+      const mine = attackPower(force, n, t.terrain, 2, state)
       const theirs = defensePower(t.garrison, owner, t, force.siege)
       const ratio = theirs <= 0 ? 99 : mine / theirs
       const needed = t.ownerId === null ? Math.max(1.2, pers.attackRatio - 0.3) : pers.attackRatio
@@ -214,8 +217,16 @@ function aiAttack(state: GameState, n: Nation) {
   }
 }
 
+const AI_POLICIES: Record<Nation['personality'], Nation['policies']> = {
+  aggressive: { economy: 'mercantile', military: 'expansionist', society: 'scholarly', changedTurn: 0 },
+  builder: { economy: 'agrarian', military: 'drilled', society: 'tolerant', changedTurn: 0 },
+  merchant: { economy: 'mercantile', military: 'levies', society: 'scholarly', changedTurn: 0 },
+  defensive: { economy: 'agrarian', military: 'drilled', society: 'devout', changedTurn: 0 },
+}
+
 export function runAI(state: GameState, n: Nation): void {
   if (!n.alive || n.isPlayer) return
+  if (n.policies.economy === null) n.policies = { ...AI_POLICIES[n.personality], changedTurn: state.turn }
   chooseResearch(n)
   const budget = nationBudget(state, n)
   if (budget.stability < 40) n.taxRate = 15
