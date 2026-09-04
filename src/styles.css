@@ -354,6 +354,8 @@ button:focus:not(:focus-visible) { outline: none; }
 
 .siege-strip { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border-radius: 8px; background: rgba(245,165,36,.08); border: 1px solid rgba(245,165,36,.3); }
 
+.construction { border-color: rgba(79,168,255,.35); background: rgba(79,168,255,.07); }
+
 /* ---------- mobile (must stay last so it wins) ---------- */
 @media (max-width: 900px) {
   /* header: one compact row plus a slim resource strip */

@@ -2,7 +2,7 @@ import type { Army, BattleReport, FieldArmy, GameState, Nation, Province, Terrai
 import { TERRAINS, UNIT_ORDER, UNITS } from './data'
 import { addArmy, armySize, clamp, emptyArmy, hasTech, log, nationHasResource, ownedProvinces } from './helpers'
 import { computeStability } from './economy'
-import { applyDefenderLosses, armyById, breakSiege, defendersAt, moveCost, pruneArmies, removeArmy, retreatArmy, wallsBreached } from './armies'
+import { applyDefenderLosses, armyById, breakSiege, crossesRiver, defendersAt, moveCost, pruneArmies, removeArmy, retreatArmy, wallsBreached } from './armies'
 import { nextRand, pick } from './rng'
 
 export function attackPower(army: Army, n: Nation | null, terrain: Terrain, round: number, state?: GameState): number {
@@ -32,7 +32,7 @@ export function attackPower(army: Army, n: Nation | null, terrain: Terrain, roun
   return total
 }
 
-export function defensePower(army: Army, n: Nation | null, p: Province, attackerSiege: number, breached = 0): number {
+export function defensePower(army: Army, n: Nation | null, p: Province, attackerSiege: number, breached = 0, acrossRiver = false): number {
   let total = 0
   for (const k of UNIT_ORDER) total += army[k] * UNITS[k].defense
   const t = TERRAINS[p.terrain]
@@ -41,6 +41,7 @@ export function defensePower(army: Army, n: Nation | null, p: Province, attacker
   const effWalls = Math.max(0, p.buildings.walls - attackerSiege * 0.5 - breached)
   total *= 1 + wallBonus * effWalls
   total *= 1 + 0.08 * p.buildings.barracks
+  if (acrossRiver) total *= 1.25
   if (hasTech(n, 'tactics')) total *= 1.1
   if (hasTech(n, 'professionalArmy')) total *= 1.1
   if (n?.policies.military === 'drilled') total *= 1.1
@@ -77,6 +78,8 @@ export interface BattleArgs {
   kind: 'battle' | 'rebellion'
   /** Wall levels already knocked down by a siege. */
   breached?: number
+  /** The attackers had to force a river crossing. */
+  acrossRiver?: boolean
 }
 
 export function resolveBattle(state: GameState, args: BattleArgs): BattleReport {
@@ -92,7 +95,7 @@ export function resolveBattle(state: GameState, args: BattleArgs): BattleReport 
 
   for (let r = 1; r <= 8 && winner === null; r++) {
     const A = attackPower(atk, an, args.province.terrain, r, state)
-    const D = defensePower(def, dn, args.province, atk.siege, args.breached ?? 0)
+    const D = defensePower(def, dn, args.province, atk.siege, args.breached ?? 0, args.acrossRiver ?? false)
     if (A + D <= 0) break
     const aFrac = clamp((D / (A + D)) * 0.3 * (0.8 + 0.4 * nextRand(state)), 0, 0.9)
     const dFrac = clamp((A / (A + D)) * 0.3 * (0.8 + 0.4 * nextRand(state)), 0, 0.9)
@@ -209,8 +212,9 @@ export function performArmyAttack(state: GameState, armyId: number, toId: number
   const defence = defendersAt(state, toId)
 
   const breached = fullyBreached ? to.buildings.walls : wallsBreached(army, to)
+  const acrossRiver = crossesRiver(state.provinces[army.provinceId], to)
   const report = resolveBattle(state, {
-    attackerId, defenderId, attacker: force, defender: { ...defence.units }, province: to, kind: 'battle', breached,
+    attackerId, defenderId, attacker: force, defender: { ...defence.units }, province: to, kind: 'battle', breached, acrossRiver,
   })
 
   army.units = { ...report.attackerEnd }

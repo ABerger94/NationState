@@ -10,7 +10,7 @@ const MOBILE_STEPS = [
 
 const STEPS = [
   { glyph: '◈', title: 'Objectives and Advisor', text: 'Top left. Your next three goals, each paying gold, and an advisor who warns you before things go wrong.' },
-  { glyph: '⬢', title: 'The map', text: 'Your realm is blue with a beacon over the capital. Click any hex to select it. Left-drag pans, right-drag rotates, scroll zooms.' },
+  { glyph: '⬢', title: 'The map', text: 'Your realm is blue with a beacon over the capital. Rivers make hard borders and mountain passes are the cheap way through ranges. Left-drag pans, right-drag rotates, scroll zooms.' },
   { glyph: '⚑', title: 'Armies', text: 'Recruit troops, then raise an army from the garrison. Click the army to command it, then click a blue tile to march or a red one to attack.' },
   { glyph: '☰', title: 'Panels', text: 'Right side. Province details, your nation\'s treasury, research and edicts, diplomacy, military and the chronicle.' },
   { glyph: '↵', title: 'End turn', text: 'Top right, or press Enter. Sieges grind on, armies eat, and the world moves. Then you get a short report.' },

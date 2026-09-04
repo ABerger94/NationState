@@ -10,7 +10,7 @@ export function Labels({ state, heights, playerId, modeLabels = null, modeColor 
   return (
     <group>
       {state.provinces.map((p) => {
-        const [x, z] = tilePosition(p.col, p.row)
+        const [x, z] = tilePosition(p.col, p.row, state.cols, state.rows)
         const owner = p.ownerId === null ? null : state.nations[p.ownerId]
         const units = armySize(p.garrison)
         const cls = 'badge' + (p.ownerId === playerId ? ' mine' : owner ? '' : ' free') + (modeColor ? ' mode mode-' + modeColor : '')

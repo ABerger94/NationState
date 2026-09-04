@@ -49,7 +49,7 @@ export function StaticDecor({ state, heights }: { state: GameState; heights: num
     const rock: Inst[] = []
     for (const p of state.provinces) {
       const rnd = tileRand(state.seed, p.id, 3)
-      const [cx, cz] = tilePosition(p.col, p.row)
+      const [cx, cz] = tilePosition(p.col, p.row, state.cols, state.rows)
       const top = heights[p.id]
       const trees = p.terrain === 'forest' ? 11 : p.terrain === 'hills' ? 3 : p.terrain === 'plains' ? (rnd() < 0.55 ? 2 : 0) : p.terrain === 'coast' ? (rnd() < 0.35 ? 1 : 0) : 2
       const palette = p.terrain === 'hills' ? AUTUMN.concat(CANOPY.slice(0, 2)) : CANOPY
@@ -184,7 +184,7 @@ export function TileProps({ p, state, top }: { p: Province; state: GameState; to
   const soldierKey = (Object.keys(p.garrison) as UnitKey[]).map((k) => `${k}${p.garrison[k]}`).join('')
 
   const content = useMemo(() => {
-    const [cx, cz] = tilePosition(p.col, p.row)
+    const [cx, cz] = tilePosition(p.col, p.row, state.cols, state.rows)
     const rnd = tileRand(state.seed, p.id, 11)
     const nodes: JSX.Element[] = []
     let key = 0

@@ -215,8 +215,20 @@ export function isPassable(state: GameState, p: Province, nationId: number): boo
   return hostileArmiesAt(state, p.id, nationId).length === 0
 }
 
+/** Cost to enter a province, before any river along the way. */
 export function moveCost(p: Province): number {
+  if (p.terrain === 'mountains' && p.pass) return TERRAIN_MOVE_COST.hills
   return TERRAIN_MOVE_COST[p.terrain]
+}
+
+/** True when a river runs along the border between two provinces. */
+export function crossesRiver(from: Province, to: Province): boolean {
+  return from.rivers.includes(to.id)
+}
+
+/** Cost of stepping from one province to a neighbour, including the river crossing. */
+export function stepCost(from: Province, to: Province): number {
+  return moveCost(to) + (crossesRiver(from, to) ? 1 : 0)
 }
 
 /** Province ids the army can reach this turn, mapped to the movement they cost. */
@@ -230,7 +242,7 @@ export function reachable(state: GameState, army: FieldArmy): Map<number, number
     for (const nid of state.provinces[id].neighbors) {
       const p = state.provinces[nid]
       if (!isPassable(state, p, army.ownerId)) continue
-      const cost = spent + moveCost(p)
+      const cost = spent + stepCost(state.provinces[id], p)
       if (cost > army.movement) continue
       if (out.has(nid) && out.get(nid)! <= cost) continue
       out.set(nid, cost)
@@ -253,7 +265,7 @@ export function pathTo(state: GameState, army: FieldArmy, destId: number): numbe
     for (const nid of state.provinces[id].neighbors) {
       const p = state.provinces[nid]
       if (!isPassable(state, p, army.ownerId)) continue
-      const c = cost.get(id)! + moveCost(p)
+      const c = cost.get(id)! + stepCost(state.provinces[id], p)
       if (c > army.movement) continue
       if (cost.has(nid) && cost.get(nid)! <= c) continue
       cost.set(nid, c)
@@ -278,7 +290,9 @@ export function canMoveArmy(state: GameState, army: FieldArmy, destId: number): 
   if (army.movement <= 0) return { ok: false, reason: 'No movement left this turn', cost: 0, path: [] }
   const path = pathTo(state, army, destId)
   if (!path) return { ok: false, reason: 'Out of range, or the way is blocked', cost: 0, path: [] }
-  const cost = path.reduce((s, id) => s + moveCost(state.provinces[id]), 0)
+  let cost = 0
+  let prev = army.provinceId
+  for (const id of path) { cost += stepCost(state.provinces[prev], state.provinces[id]); prev = id }
   return { ok: true, reason: '', cost, path }
 }
 

@@ -1,5 +1,5 @@
 import type { BuildingKey, GameState, Nation, Province, Resources, UnitKey } from './types'
-import { BUILDINGS, DIFFICULTIES, TERRAINS, UNIT_ORDER, UNITS } from './data'
+import { BUILDINGS, DEVELOPMENT_TURNS, DIFFICULTIES, MAX_DEVELOPMENT, TERRAINS, UNIT_ORDER, UNITS, developmentBonus, developmentCost } from './data'
 import { armySize, clamp, emptyResources, hasTech, luxuryCount, nationHasResource, ownedProvinces, totalPopulation } from './helpers'
 
 export interface ProvinceOutput { food: number; wood: number; iron: number; gold: number; science: number }
@@ -39,7 +39,7 @@ export function provinceOutput(state: GameState, p: Province, stability?: number
   const owner = p.ownerId === null ? null : state.nations[p.ownerId]
   const t = TERRAINS[p.terrain]
   const w = p.population / 1000
-  const dev = 1 - p.devastation * 0.6
+  const dev = (1 - p.devastation * 0.6) * developmentBonus(p.development)
   const pol = owner?.policies
   let foodMult = (1 + 0.3 * p.buildings.farm) * (hasTech(owner, 'agriculture') ? 1.2 : 1)
   let woodMult = 1 + 0.4 * p.buildings.lumberMill
@@ -161,13 +161,32 @@ export function missingResources(r: Resources, cost: Resources): string {
   return parts.join(', ')
 }
 
+/** Turns a building takes here, shortened by Engineering. */
+export function buildTurns(n: Nation, key: BuildingKey): number {
+  return Math.max(1, BUILDINGS[key].turns - (hasTech(n, 'engineering') ? 1 : 0))
+}
+
+export function developTurns(n: Nation): number {
+  return Math.max(1, DEVELOPMENT_TURNS - (hasTech(n, 'engineering') ? 1 : 0))
+}
+
 export function canBuild(state: GameState, n: Nation, p: Province, key: BuildingKey): { ok: boolean; reason: string } {
   if (p.ownerId !== n.id) return { ok: false, reason: 'Not your province' }
   if (p.buildings[key] >= BUILDINGS[key].max) return { ok: false, reason: 'Maximum level reached' }
+  if (p.construction) return { ok: false, reason: 'Already building something here' }
   const cost = buildingCost(n, key)
   if (!canAfford(n.resources, cost)) return { ok: false, reason: `Need ${missingResources(n.resources, cost)}` }
   void state
   return { ok: true, reason: '' }
+}
+
+export function canDevelop(n: Nation, p: Province): { ok: boolean; reason: string; cost: number } {
+  const cost = developmentCost(p.development)
+  if (p.ownerId !== n.id) return { ok: false, reason: 'Not your province', cost }
+  if (p.development >= MAX_DEVELOPMENT) return { ok: false, reason: 'Fully developed', cost }
+  if (p.construction) return { ok: false, reason: 'Already building something here', cost }
+  if (n.resources.gold < cost) return { ok: false, reason: `Need ${Math.ceil(cost - n.resources.gold)} gold`, cost }
+  return { ok: true, reason: '', cost }
 }
 
 export function canRecruit(state: GameState, n: Nation, p: Province, key: UnitKey, count: number): { ok: boolean; reason: string } {

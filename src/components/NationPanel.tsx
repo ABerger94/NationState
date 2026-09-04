@@ -1,6 +1,6 @@
 import type { GameState, PolicyCategory, TechKey } from '../engine/types'
 import { canChangePolicy, type Action } from '../engine/actions'
-import { CONQUEST_SHARE, MAX_TURNS, PERSONALITIES, POLICIES, TECHS, TECH_ORDER, TRADE_PRICES } from '../engine/data'
+import { CONQUEST_SHARE, PERSONALITIES, POLICIES, TECHS, TECH_ORDER, TRADE_PRICES } from '../engine/data'
 import { armyPower, armySize, fmt, fmtSigned, nationArmy, ownedProvinces, playerNation, totalPopulation } from '../engine/helpers'
 import { nationBudget, nationScore } from '../engine/economy'
 import { availableTechs } from '../engine/ai'
@@ -33,8 +33,8 @@ export function NationPanel({ state, dispatch, onFocus }: Props) {
       <div className="card">
         <div className="row between small"><span>Conquest: {ownedProvinces(state, player.id).length} of {Math.ceil(state.provinces.length * CONQUEST_SHARE)} provinces needed</span><b>{Math.round((conquest / CONQUEST_SHARE) * 100)}%</b></div>
         <Bar value={conquest} max={CONQUEST_SHARE} color="var(--accent)" />
-        <div className="row between small" style={{ marginTop: 8 }}><span>Score: rank {myRank} of {ranking.length}</span><span className="muted">{MAX_TURNS - state.turn} turns remain</span></div>
-        <div className="muted small">Win by holding {Math.round(CONQUEST_SHARE * 100)}% of the map, destroying every rival, or leading the score at turn {MAX_TURNS}.</div>
+        <div className="row between small" style={{ marginTop: 8 }}><span>Score: rank {myRank} of {ranking.length}</span><span className="muted">{state.maxTurns - state.turn} turns remain</span></div>
+        <div className="muted small">Win by holding {Math.round(CONQUEST_SHARE * 100)}% of the map, destroying every rival, or leading the score at turn {state.maxTurns}.</div>
       </div>
 
       <h3>Edicts</h3>

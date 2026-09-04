@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import type { Difficulty } from '../engine/types'
-import { DIFFICULTIES } from '../engine/data'
+import { DIFFICULTIES, MAP_SIZES, type MapSize } from '../engine/data'
 import { createGame } from '../engine/world'
 import { WorldMap } from '../three/WorldMap'
 
-interface Props { onStart: (o: { seed: number; playerName: string; difficulty: Difficulty }) => void }
+interface Props { onStart: (o: { seed: number; playerName: string; difficulty: Difficulty; size: MapSize }) => void }
 
 const NAMES = ['Kingdom of Aldmere', 'Republic of Tessaly', 'Empire of Varn', 'Duchy of Corvane', 'Realm of Ithil', 'Sultanate of Qesh']
 
@@ -12,7 +12,8 @@ export function NewGameScreen({ onStart }: Props) {
   const [name, setName] = useState(() => NAMES[Math.floor(Math.random() * NAMES.length)])
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1_000_000))
   const [difficulty, setDifficulty] = useState<Difficulty>('normal')
-  const preview = useMemo(() => createGame({ seed, playerName: 'Preview', difficulty: 'normal' }), [seed])
+  const [size, setSize] = useState<MapSize>('small')
+  const preview = useMemo(() => createGame({ seed, playerName: 'Preview', difficulty: 'normal', size }), [seed, size])
   return (
     <div className="newgame">
       <WorldMap state={preview} selected={null} targets={[]} highlight={[]} focus={null} fx={[]} onFxDone={() => {}} onSelect={() => {}} interactive={false} autoRotate showLabels={false} />
@@ -32,6 +33,14 @@ export function NewGameScreen({ onStart }: Props) {
             </div>
           </label>
         </div>
+        <div className="field-label">World size</div>
+        <div className="diff">
+          {(Object.keys(MAP_SIZES) as MapSize[]).map((k) => (
+            <button key={k} className={'btn' + (size === k ? ' primary' : '')} onClick={() => setSize(k)}>{MAP_SIZES[k].label}</button>
+          ))}
+        </div>
+        <p className="muted small" style={{ marginTop: 6 }}>{MAP_SIZES[size].description}</p>
+
         <div className="field-label">Difficulty</div>
         <div className="diff">
           {(Object.keys(DIFFICULTIES) as Difficulty[]).map((d) => (
@@ -39,7 +48,7 @@ export function NewGameScreen({ onStart }: Props) {
           ))}
         </div>
         <p className="muted small" style={{ marginTop: 6 }}>{DIFFICULTIES[difficulty].description}</p>
-        <button className="btn primary big found" onClick={() => onStart({ seed, playerName: name, difficulty })}>Found the nation</button>
+        <button className="btn primary big found" onClick={() => onStart({ seed, playerName: name, difficulty, size })}>Found the nation</button>
         <details className="rules-details">
           <summary>How to play</summary>
           <ul className="rules">

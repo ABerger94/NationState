@@ -38,7 +38,7 @@ function Ring({ y, color, speed = 3, wide = false }: { y: number; color: string;
 }
 
 export function Tile({ p, state, height, selected, hovered, target, highlight, armed = false, besieged = false, modeColor = null, interactive, onSelect, onHover }: TileProps) {
-  const [x, z] = tilePosition(p.col, p.row)
+  const [x, z] = tilePosition(p.col, p.row, state.cols, state.rows)
   const owner = p.ownerId === null ? null : state.nations[p.ownerId]
   const ownerColor = owner?.color ?? null
   const isMine = !!owner?.isPlayer
@@ -99,7 +99,7 @@ export function Borders({ state, heights }: { state: GameState; heights: number[
 
   const segments = useMemo(() => {
     const out: Array<{ x: number; y: number; z: number; rot: number; color: string; mine: boolean }> = []
-    const positions = state.provinces.map((p) => tilePosition(p.col, p.row))
+    const positions = state.provinces.map((p) => tilePosition(p.col, p.row, state.cols, state.rows))
     for (const p of state.provinces) {
       if (p.ownerId === null) continue
       const color = state.nations[p.ownerId].color
@@ -158,5 +158,55 @@ export function Borders({ state, heights }: { state: GameState; heights: number[
         <meshStandardMaterial ref={mineMat} roughness={0.35} emissive="#ffffff" emissiveIntensity={0.5} />
       </instancedMesh>
     </group>
+  )
+}
+
+
+/** Rivers drawn as blue bars along the edges they run down. */
+export function Rivers({ state, heights }: { state: GameState; heights: number[] }) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  const segments = useMemo(() => {
+    const out: Array<{ x: number; y: number; z: number; rot: number }> = []
+    const positions = state.provinces.map((p) => tilePosition(p.col, p.row, state.cols, state.rows))
+    for (const p of state.provinces) {
+      for (const nid of p.rivers) {
+        if (nid < p.id) continue
+        const [cx, cz] = positions[p.id]
+        for (let k = 0; k < 6; k++) {
+          const a = Math.PI / 2 + (k * Math.PI) / 3 + Math.PI / 6
+          const nx = cx + Math.sqrt(3) * Math.cos(a)
+          const nz = cz + Math.sqrt(3) * Math.sin(a)
+          if (Math.hypot(positions[nid][0] - nx, positions[nid][1] - nz) > 0.2) continue
+          const [ax, az] = hexCorner(k)
+          const [bx, bz] = hexCorner(k + 1)
+          out.push({
+            x: cx + (ax + bx) / 2, y: Math.max(heights[p.id], heights[nid]) + 0.012, z: cz + (az + bz) / 2,
+            rot: -Math.atan2(bz - az, bx - ax),
+          })
+        }
+      }
+    }
+    return out
+  }, [state.provinces, state.cols, state.rows, heights])
+
+  useLayoutEffect(() => {
+    const mesh = ref.current
+    if (!mesh) return
+    segments.forEach((s2, i) => {
+      tmpObj.position.set(s2.x, s2.y, s2.z)
+      tmpObj.rotation.set(0, s2.rot, 0)
+      tmpObj.scale.set(1.02, 0.03, 0.17)
+      tmpObj.updateMatrix()
+      mesh.setMatrixAt(i, tmpObj.matrix)
+    })
+    mesh.count = segments.length
+    mesh.instanceMatrix.needsUpdate = true
+  }, [segments])
+
+  if (!segments.length) return null
+  return (
+    <instancedMesh ref={ref} args={[GEO.box, undefined, Math.max(1, segments.length)]} count={segments.length} frustumCulled={false} receiveShadow>
+      <meshStandardMaterial color="#3f8fbf" roughness={0.25} metalness={0.1} emissive="#1d5f8a" emissiveIntensity={0.35} />
+    </instancedMesh>
   )
 }

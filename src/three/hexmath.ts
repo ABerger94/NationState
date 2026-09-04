@@ -1,15 +1,14 @@
 import type { Terrain } from '../engine/types'
-import { COLS, ROWS } from '../engine/data'
-
 export const HEX_R = 1
 export const HEX_W = Math.sqrt(3) * HEX_R
-export const MAP_W = HEX_W * (COLS + 0.5)
-export const MAP_D = 1.5 * HEX_R * (ROWS - 1) + 2 * HEX_R
+
+export const mapWidth = (cols: number) => HEX_W * (cols + 0.5)
+export const mapDepth = (rows: number) => 1.5 * HEX_R * (rows - 1) + 2 * HEX_R
 
 /** World-space x/z of a tile centre (odd-r offset layout, pointy-top hexes, map centred on the origin). */
-export function tilePosition(col: number, row: number): [number, number] {
-  const x = HEX_W * (col + 0.5 * (row & 1)) + HEX_W / 2 - MAP_W / 2
-  const z = 1.5 * HEX_R * row + HEX_R - MAP_D / 2
+export function tilePosition(col: number, row: number, cols: number, rows: number): [number, number] {
+  const x = HEX_W * (col + 0.5 * (row & 1)) + HEX_W / 2 - mapWidth(cols) / 2
+  const z = 1.5 * HEX_R * row + HEX_R - mapDepth(rows) / 2
   return [x, z]
 }
 

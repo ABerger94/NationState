@@ -4,11 +4,11 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import type { GameState } from '../engine/types'
-import { Borders, Tile } from './Tiles'
+import { Borders, Rivers, Tile } from './Tiles'
 import { StaticDecor, TileProps } from './Decor'
 import { Effects, type Fx } from './Effects'
 import { LabelLOD, Labels } from './Labels'
-import { MAP_D, MAP_W, tileHeight, tilePosition } from './hexmath'
+import { mapDepth, mapWidth, tileHeight, tilePosition } from './hexmath'
 import { mapModeTile, type MapMode } from '../engine/yields'
 import { Armies } from './Armies'
 
@@ -123,7 +123,7 @@ function Clouds() {
   )
 }
 
-function CameraRig({ focus, autoRotate, interactive, initialTarget }: { focus: Focus | null; autoRotate: boolean; interactive: boolean; initialTarget: [number, number, number] }) {
+function CameraRig({ focus, autoRotate, interactive, initialTarget, cols, rows }: { focus: Focus | null; autoRotate: boolean; interactive: boolean; initialTarget: [number, number, number]; cols: number; rows: number }) {
   const controls = useRef<OrbitControlsImpl>(null)
   const goal = useRef<THREE.Vector3 | null>(null)
   const { camera } = useThree()
@@ -140,8 +140,8 @@ function CameraRig({ focus, autoRotate, interactive, initialTarget }: { focus: F
       camera.position.add(c.target.clone().sub(before))
       if (c.target.distanceTo(goal.current) < 0.03) goal.current = null
     }
-    const limX = MAP_W / 2 + 1
-    const limZ = MAP_D / 2 + 1
+    const limX = mapWidth(cols) / 2 + 1
+    const limZ = mapDepth(rows) / 2 + 1
     const cx = THREE.MathUtils.clamp(c.target.x, -limX, limX)
     const cz = THREE.MathUtils.clamp(c.target.z, -limZ, limZ)
     if (cx !== c.target.x || cz !== c.target.z) {
@@ -183,7 +183,7 @@ export function WorldMap({ state, selected, targets, highlight, attackTarget = n
   const initialTarget = useMemo<[number, number, number]>(() => {
     if (compact) {
       const cap = state.provinces[state.nations.find((n) => n.isPlayer)?.capitalId ?? 0]
-      const [x, z] = tilePosition(cap.col, cap.row)
+      const [x, z] = tilePosition(cap.col, cap.row, state.cols, state.rows)
       return [x, 0, z]
     }
     return interactive ? [2.2, 0, 0.6] : [0, 0, 0]
@@ -192,7 +192,7 @@ export function WorldMap({ state, selected, targets, highlight, attackTarget = n
   const initialCamera = useMemo<[number, number, number]>(() => compact ? [initialTarget[0], 11.5, initialTarget[2] + 6] : interactive ? [2.2, 15.6, 14.4] : [0, 11, 12], [compact, interactive, initialTarget])
   const heights = useMemo(() => state.provinces.map((p) => tileHeight(p.terrain, state.seed, p.id)), [state.seed, state.provinces.length])
   const positions = useMemo(() => state.provinces.map((p, i) => {
-    const [x, z] = tilePosition(p.col, p.row)
+    const [x, z] = tilePosition(p.col, p.row, state.cols, state.rows)
     focusPositions.set(p.id, new THREE.Vector3(x, heights[i], z))
     return [x, heights[i], z] as [number, number, number]
   }), [state.provinces, heights])
@@ -232,12 +232,13 @@ export function WorldMap({ state, selected, targets, highlight, attackTarget = n
           ))}
         </group>
         <Borders state={state} heights={heights} />
+        <Rivers state={state} heights={heights} />
         <StaticDecor state={state} heights={heights} />
         {state.provinces.map((p) => <TileProps key={p.id} p={p} state={state} top={heights[p.id]} />)}
         <Armies state={state} heights={heights} selectedArmy={selectedArmy} onSelectArmy={onSelectArmy ?? (() => {})} interactive={interactive} />
         {showLabels && <Labels state={state} heights={heights} playerId={playerId} modeLabels={mapMode === 'realm' ? null : modeTiles.map((m) => m?.label ?? '')} modeColor={mapMode === 'realm' ? null : mapMode} />}
         <Effects fx={fx} positions={positions} onDone={onFxDone} />
-        <CameraRig focus={focus} autoRotate={autoRotate} interactive={interactive} initialTarget={initialTarget} />
+        <CameraRig focus={focus} autoRotate={autoRotate} interactive={interactive} initialTarget={initialTarget} cols={state.cols} rows={state.rows} />
         {showLabels && <LabelLOD />}
       </Canvas>
     </div>

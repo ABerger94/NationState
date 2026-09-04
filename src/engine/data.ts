@@ -4,6 +4,14 @@ export const COLS = 11
 export const ROWS = 8
 export const NATION_COUNT = 6
 export const MAX_TURNS = 150
+
+export type MapSize = 'small' | 'standard' | 'large'
+export interface MapSizeDef { label: string; cols: number; rows: number; nations: number; maxTurns: number; description: string }
+export const MAP_SIZES: Record<MapSize, MapSizeDef> = {
+  small: { label: 'Small', cols: 11, rows: 8, nations: 6, maxTurns: 150, description: '88 provinces, 6 nations, 150 turns. A tight, fast game.' },
+  standard: { label: 'Standard', cols: 16, rows: 11, nations: 8, maxTurns: 200, description: '176 provinces, 8 nations, 200 turns. Room to manoeuvre.' },
+  large: { label: 'Large', cols: 20, rows: 14, nations: 10, maxTurns: 250, description: '280 provinces, 10 nations, 250 turns. A long campaign.' },
+}
 export const CONQUEST_SHARE = 0.6
 export const START_YEAR = 1000
 export const SAVE_KEY = 'nationstate-save-v1'
@@ -33,18 +41,23 @@ export const SUPPLY_PER_POP = 2000
 export const ATTRITION_RATE = 0.15
 /** No single army may field more than this many units; empires must fight with several. */
 export const MAX_ARMY_UNITS = 24
+/** Province development: level 1 is untouched land, 5 is a thriving heartland. */
+export const MAX_DEVELOPMENT = 5
+export const DEVELOPMENT_TURNS = 4
+export const developmentCost = (level: number) => 120 + (level - 1) * 90
+export const developmentBonus = (level: number) => 1 + (level - 1) * 0.15
 
-export interface BuildingDef { name: string; description: string; cost: Resources; max: number }
+export interface BuildingDef { name: string; description: string; cost: Resources; max: number; turns: number }
 export const BUILDINGS: Record<BuildingKey, BuildingDef> = {
-  farm: { name: 'Farm', description: '+30% food and +25% population capacity per level.', cost: { gold: 60, food: 0, wood: 20, iron: 0 }, max: 5 },
-  lumberMill: { name: 'Lumber Mill', description: '+40% wood production per level.', cost: { gold: 50, food: 0, wood: 10, iron: 0 }, max: 4 },
-  mine: { name: 'Mine', description: '+40% iron production per level.', cost: { gold: 80, food: 0, wood: 20, iron: 0 }, max: 4 },
-  market: { name: 'Market', description: '+25% tax income per level.', cost: { gold: 100, food: 0, wood: 30, iron: 0 }, max: 4 },
-  granary: { name: 'Granary', description: '+300 food storage, +30% population capacity, halves famine losses here.', cost: { gold: 70, food: 0, wood: 40, iron: 0 }, max: 2 },
-  barracks: { name: 'Barracks', description: 'Required to train professional troops. Garrison fights +8% harder per level.', cost: { gold: 90, food: 0, wood: 30, iron: 10 }, max: 3 },
-  walls: { name: 'Walls', description: '+45% defence per level. Attackers must besiege them or storm at heavy cost.', cost: { gold: 120, food: 0, wood: 40, iron: 20 }, max: 3 },
-  university: { name: 'University', description: '+3 science per turn per level.', cost: { gold: 150, food: 0, wood: 50, iron: 0 }, max: 2 },
-  temple: { name: 'Temple', description: '-3 unrest per turn per level and steadier stability.', cost: { gold: 80, food: 0, wood: 30, iron: 0 }, max: 2 },
+  farm: { name: 'Farm', description: '+30% food and +25% population capacity per level.', cost: { gold: 60, food: 0, wood: 20, iron: 0 }, max: 5, turns: 2 },
+  lumberMill: { name: 'Lumber Mill', description: '+40% wood production per level.', cost: { gold: 50, food: 0, wood: 10, iron: 0 }, max: 4, turns: 2 },
+  mine: { name: 'Mine', description: '+40% iron production per level.', cost: { gold: 80, food: 0, wood: 20, iron: 0 }, max: 4, turns: 3 },
+  market: { name: 'Market', description: '+25% tax income per level.', cost: { gold: 100, food: 0, wood: 30, iron: 0 }, max: 4, turns: 3 },
+  granary: { name: 'Granary', description: '+300 food storage, +30% population capacity, halves famine losses here.', cost: { gold: 70, food: 0, wood: 40, iron: 0 }, max: 2, turns: 2 },
+  barracks: { name: 'Barracks', description: 'Required to train professional troops. Garrison fights +8% harder per level.', cost: { gold: 90, food: 0, wood: 30, iron: 10 }, max: 3, turns: 3 },
+  walls: { name: 'Walls', description: '+45% defence per level. Attackers must besiege them or storm at heavy cost.', cost: { gold: 120, food: 0, wood: 40, iron: 20 }, max: 3, turns: 4 },
+  university: { name: 'University', description: '+3 science per turn per level.', cost: { gold: 150, food: 0, wood: 50, iron: 0 }, max: 2, turns: 5 },
+  temple: { name: 'Temple', description: '-3 unrest per turn per level and steadier stability.', cost: { gold: 80, food: 0, wood: 30, iron: 0 }, max: 2, turns: 3 },
 }
 export const BUILDING_ORDER: BuildingKey[] = ['farm', 'lumberMill', 'mine', 'market', 'granary', 'barracks', 'walls', 'university', 'temple']
 
@@ -90,6 +103,10 @@ export const AI_NATIONS: AiNationDef[] = [
   { name: 'Drakmoor Clans', adjective: 'Drakmoori', color: '#17b8a6', personality: 'builder' },
   { name: 'Illyrion', adjective: 'Illyrian', color: '#b8c2cc', personality: 'merchant' },
   { name: 'Cassar Dominion', adjective: 'Cassarian', color: '#c9a227', personality: 'defensive' },
+  { name: 'Vhorran Khanate', adjective: 'Vhorrani', color: '#7d5fd6', personality: 'aggressive' },
+  { name: 'Free Cities of Marn', adjective: 'Marnish', color: '#3fb96b', personality: 'merchant' },
+  { name: 'Highhold', adjective: 'Highholder', color: '#8a6f4e', personality: 'builder' },
+  { name: 'Thessi League', adjective: 'Thessian', color: '#e06fa0', personality: 'defensive' },
 ]
 /** The player is always royal blue so their realm reads instantly against every terrain. */
 export const PLAYER_COLOR = '#3d8bff'

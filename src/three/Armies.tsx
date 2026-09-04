@@ -44,7 +44,7 @@ export function Armies({ state, heights, selectedArmy, onSelectArmy, interactive
   return (
     <group>
       {groups.map(([provinceId, armies]) => {
-        const [cx, cz] = tilePosition(state.provinces[provinceId].col, state.provinces[provinceId].row)
+        const [cx, cz] = tilePosition(state.provinces[provinceId].col, state.provinces[provinceId].row, state.cols, state.rows)
         const top = heights[provinceId]
         return armies.map((a, idx) => {
           const owner = state.nations[a.ownerId]
