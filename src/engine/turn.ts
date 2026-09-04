@@ -1,5 +1,5 @@
 import type { GameState, Nation } from './types'
-import { CONQUEST_SHARE, MAX_TURNS, TECHS, UNIT_ORDER } from './data'
+import { BUILDINGS, CONQUEST_SHARE, MAX_DEVELOPMENT, TECHS, UNIT_ORDER } from './data'
 import { armySize, cloneState, log, ownedProvinces, playerNation } from './helpers'
 import { nationBudget, nationScore } from './economy'
 import { growProvince, growTribal, updateUnrest } from './population'
@@ -84,7 +84,15 @@ function resolveSieges(state: GameState): void {
   for (const fall of advanceSieges(state)) {
     const name = state.provinces[fall.provinceId].name
     log(state, 'war', `The walls of ${name} are broken after a long siege.`)
-    performArmyAttack(state, fall.armyId, fall.provinceId, true)
+    const report = performArmyAttack(state, fall.armyId, fall.provinceId, true)
+    // A repulsed storm means the defenders sortie and the siege must begin again.
+    if (report && report.winner === 'defender') {
+      const army = state.armies.find((a) => a.id === fall.armyId)
+      if (army?.siege) {
+        army.siege.progress = 0
+        log(state, 'war', `The storm of ${name} is thrown back and the siege must start over.`)
+      }
+    }
   }
 }
 
@@ -95,6 +103,24 @@ function reportAttrition(state: GameState): void {
     if (army && state.nations[army.ownerId].isPlayer) {
       log(state, 'war', `${army.name} loses ${loss.lost} unit${loss.lost === 1 ? '' : 's'} to hunger and disease around ${loss.provinceName}.`)
     }
+  }
+}
+
+/** Moves every province's project along, finishing what is ready. */
+function advanceConstruction(state: GameState, n: Nation): void {
+  for (const p of ownedProvinces(state, n.id)) {
+    if (!p.construction) continue
+    p.construction.turnsLeft -= 1
+    if (p.construction.turnsLeft > 0) continue
+    if (p.construction.kind === 'building') {
+      p.buildings[p.construction.building] += 1
+      n.stats.built += 1
+      if (n.isPlayer) log(state, 'economy', `${BUILDINGS[p.construction.building].name} completed in ${p.name}.`)
+    } else {
+      p.development = Math.min(MAX_DEVELOPMENT, p.development + 1)
+      if (n.isPlayer) log(state, 'economy', `${p.name} grows to development ${p.development}.`)
+    }
+    p.construction = null
   }
 }
 
@@ -145,7 +171,7 @@ function checkVictory(state: GameState): void {
       return
     }
   }
-  if (state.turn >= MAX_TURNS) {
+  if (state.turn >= state.maxTurns) {
     const ranked = state.nations.filter((n) => n.alive).map((n) => ({ n, s: nationScore(state, n) })).sort((a, b) => b.s - a.s)
     state.gameOver = true
     state.winner = ranked[0].n.id
@@ -161,7 +187,7 @@ export function endTurn(prev: GameState): GameState {
   state.lastTurnBattles = []
 
   refreshMovement(state)
-  for (const n of state.nations) if (n.alive) { processEconomy(state, n); levyMilitia(state, n) }
+  for (const n of state.nations) if (n.alive) { processEconomy(state, n); levyMilitia(state, n); advanceConstruction(state, n) }
   for (const p of state.provinces) if (p.ownerId === null) growTribal(p)
   for (const n of state.nations) if (n.alive && !n.isPlayer) runAI(state, n)
   processRebellions(state)

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import type { GameState } from '../engine/types'
 import { fmt, fmtSigned, playerNation, yearOf } from '../engine/helpers'
 import { nationBudget } from '../engine/economy'
-import { MAX_TURNS } from '../engine/data'
+
 import { useTween } from './useTween'
 import { Coin, Flask, Heart, Iron, Locate, Menu, Mute, Shield, Sound, Wheat, Wood } from './icons'
 import { stabilityColor } from '../components/common'
@@ -80,7 +80,7 @@ export function TopBar({ state, busy, muted, idleArmies, warnings, onEndTurn, on
         <button className="crest" style={{ background: player.color }} onClick={onHome} title="Your nation. Click to fly to your capital (H)">{player.name.replace(/^(Kingdom|Empire|Republic|Realm|Duchy|Sultanate) of /i, '').charAt(0)}</button>
         <div className="title-block">
           <div className="nation-name">{player.name} <span className="you-pill">you</span></div>
-          <div className="turn-line">Turn {state.turn} <span className="dim">/ {MAX_TURNS}</span> · Year {yearOf(state)}</div>
+          <div className="turn-line">Turn {state.turn} <span className="dim">/ {state.maxTurns}</span> · Year {yearOf(state)}</div>
         </div>
       </div>
       <div className="chips-res">

@@ -2,7 +2,7 @@ import type { BuildingKey, GameState, Nation, Province, TechKey, UnitKey } from 
 import { BUILDINGS, MAX_ARMY_UNITS, PERSONALITIES, TECHS, TECH_ORDER, UNITS } from './data'
 import { armyPower, armySize, bordersNation, hasTech, hexDistance, log, nationArmy, ownedProvinces, totalPopulation } from './helpers'
 import { armiesOf, canBesiege, defendersAt, disbandIntoGarrison, mergeArmies, moveArmy, raiseArmy, reachable, siegeRequired, startSiege, supplyLimit, unitsQuartered, wallsBreached } from './armies'
-import { buildingCost, canAfford, nationBudget, pay, unitCost } from './economy'
+import { buildTurns, buildingCost, canAfford, canDevelop, developTurns, nationBudget, pay, unitCost } from './economy'
 import { aiAcceptsAlliance, aiAcceptsPeace, atWar, declareWar, formAlliance, makePeace } from './diplomacy'
 import { attackPower, canArmyAttack, defensePower, performArmyAttack } from './military'
 import type { FieldArmy } from './types'
@@ -57,7 +57,7 @@ function aiBuild(state: GameState, n: Nation) {
     for (const key of want) {
       const cost = buildingCost(n, key)
       if (n.resources.gold - cost.gold < pers.reserve || !canAfford(n.resources, cost)) continue
-      const candidates = provs.filter((p) => p.buildings[key] < BUILDINGS[key].max)
+      const candidates = provs.filter((p) => p.buildings[key] < BUILDINGS[key].max && !p.construction)
       if (!candidates.length) continue
       let target: Province
       if (key === 'walls' || key === 'barracks') {
@@ -69,11 +69,24 @@ function aiBuild(state: GameState, n: Nation) {
         target = pick(state, candidates)
       }
       pay(n, cost)
-      target.buildings[key] += 1
+      const total = buildTurns(n, key)
+      target.construction = { kind: 'building', building: key, turnsLeft: total, total }
       built = true
       break
     }
     if (!built) break
+  }
+  // A wealthy realm improves the land it already holds.
+  if (n.resources.gold > PERSONALITIES[n.personality].reserve * 3) {
+    const site = provs
+      .filter((p) => !p.construction && canDevelop(n, p).ok)
+      .sort((a, b) => b.population - a.population)[0]
+    if (site && nextRand(state) < 0.35) {
+      const check = canDevelop(n, site)
+      n.resources.gold -= check.cost
+      const total = developTurns(n)
+      site.construction = { kind: 'development', turnsLeft: total, total }
+    }
   }
 }
 

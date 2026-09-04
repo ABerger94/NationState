@@ -3,9 +3,9 @@ import type { Army, BuildingKey, GameState, Province, UnitKey } from '../engine/
 import type { Action } from '../engine/actions'
 import { armiesAt, describeFieldArmy, supplyLimit, unitsQuartered } from '../engine/armies'
 
-import { BUILDINGS, BUILDING_ORDER, RESOURCES, TERRAINS, UNITS, UNIT_ORDER } from '../engine/data'
+import { BUILDINGS, BUILDING_ORDER, MAX_DEVELOPMENT, RESOURCES, TERRAINS, UNITS, UNIT_ORDER, developmentBonus } from '../engine/data'
 import { armySize, describeArmy, emptyArmy, fmt, ownerName, playerNation } from '../engine/helpers'
-import { buildingCost, canBuild, canRecruit, provinceOutput, unitCost } from '../engine/economy'
+import { buildTurns, buildingCost, canBuild, canDevelop, canRecruit, developTurns, provinceOutput, unitCost } from '../engine/economy'
 import { provinceCapacity } from '../engine/population'
 
 import { atWar } from '../engine/diplomacy'
@@ -81,6 +81,10 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, onFocus,
           {p.devastation > 0.01 && <><dt>Devastation</dt><dd className="bad">{Math.round(p.devastation * 100)}%</dd></>}
           <dt>Food balance</dt><dd className={out.food - p.population / 1000 >= 0 ? 'ok' : 'bad'}>{(out.food - p.population / 1000 >= 0 ? '+' : '') + (out.food - p.population / 1000).toFixed(1)} <span className="muted">(makes {out.food.toFixed(1)}, eats {(p.population / 1000).toFixed(1)})</span></dd>
           <dt>Terrain</dt><dd>defence ×{t.defense} · cavalry ×{t.cavalry}</dd>
+          <dt title="Development multiplies every yield from this province">Development</dt>
+          <dd>{p.development} / {MAX_DEVELOPMENT} <span className="muted">(×{developmentBonus(p.development).toFixed(2)} yields)</span></dd>
+          {p.rivers.length > 0 && <><dt>Rivers</dt><dd className="info">on {p.rivers.length} border{p.rivers.length === 1 ? '' : 's'}</dd></>}
+          {p.terrain === 'mountains' && p.pass && <><dt>Terrain feature</dt><dd className="info">Mountain pass</dd></>}
           {mine && <><dt title="Units this province can feed before armies quartered here start to starve">Supply</dt><dd className={unitsQuartered(state, p.id, player.id) > supplyLimit(p) ? 'bad' : ''}>{unitsQuartered(state, p.id, player.id)} / {supplyLimit(p)}</dd></>}
           {p.resource && <><dt>Resource</dt><dd title={RESOURCES[p.resource].description}><span style={{ color: RESOURCES[p.resource].color }}>{RESOURCES[p.resource].glyph}</span> {RESOURCES[p.resource].name}</dd></>}
         </dl>
@@ -103,6 +107,38 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, onFocus,
       <h3 id="sec-yields">Yields</h3>
       <YieldsPanel state={state} province={p} player={player} mine={mine} dispatch={dispatch} />
 
+      {mine && (
+        <>
+          <h3 id="sec-construction">Public works</h3>
+          {p.construction ? (
+            <div className="card construction">
+              <div className="row between">
+                <b>{p.construction.kind === 'building' ? BUILDINGS[p.construction.building].name : `Development to ${p.development + 1}`}</b>
+                <span className="muted small">{p.construction.turnsLeft} of {p.construction.total} turn{p.construction.total === 1 ? '' : 's'} left</span>
+              </div>
+              <Bar value={p.construction.total - p.construction.turnsLeft} max={p.construction.total} color="var(--info)" />
+              <div className="row" style={{ marginTop: 8 }}>
+                <button className="btn small" onClick={() => dispatch({ type: 'CANCEL_CONSTRUCTION', provinceId: p.id })}>Cancel (half refunded)</button>
+              </div>
+            </div>
+          ) : (
+            <p className="muted small">Nothing is being built here. A province works on one project at a time.</p>
+          )}
+          {(() => {
+            const dev = canDevelop(player, p)
+            if (p.development >= MAX_DEVELOPMENT) return <p className="muted small">This province is fully developed.</p>
+            return (
+              <div className="row">
+                <button className="btn" disabled={!dev.ok} title={dev.reason} onClick={() => dispatch({ type: 'DEVELOP', provinceId: p.id })}>
+                  Develop to {p.development + 1} — {dev.cost} gold, {developTurns(player)} turns
+                </button>
+                <span className="muted small">+15% to every yield here</span>
+              </div>
+            )
+          })()}
+        </>
+      )}
+
       <h3 id="sec-build">Buildings</h3>
       <table className="tbl">
         <tbody>
@@ -120,6 +156,7 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, onFocus,
                 {mine && (
                   <td className="num" style={{ whiteSpace: 'nowrap' }}>
                     <div className="muted small">{costText(cost)}</div>
+                    <div className="muted small">{buildTurns(player, b)}t</div>
                     <button className="btn small" disabled={!check.ok} title={check.reason} onClick={() => dispatch({ type: 'BUILD', provinceId: p.id, building: b })}>
                       {lvl >= def.max ? 'Max' : 'Build'}
                     </button>

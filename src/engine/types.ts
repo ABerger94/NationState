@@ -44,11 +44,21 @@ export interface Province {
   row: number
   terrain: Terrain
   resource: ResourceKind | null
+  /** Neighbour ids separated from this province by a river. Always symmetric. */
+  rivers: number[]
+  /** A mountain province that armies can cross cheaply. */
+  pass: boolean
   ownerId: number | null
   population: number
   unrest: number
   devastation: number
   buildings: Record<BuildingKey, number>
+  /** Development level (1-5) multiplying every yield. */
+  development: number
+  /** The one project this province is working on. */
+  construction: { kind: 'building'; building: BuildingKey; turnsLeft: number; total: number }
+    | { kind: 'development'; turnsLeft: number; total: number }
+    | null
   garrison: Army
   neighbors: number[]
   conqueredTurn: number | null
@@ -133,6 +143,7 @@ export interface GameState {
   rng: number
   turn: number
   startYear: number
+  maxTurns: number
   difficulty: Difficulty
   cols: number
   rows: number

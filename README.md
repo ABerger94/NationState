@@ -4,6 +4,10 @@ A turn-based nation building strategy game that runs entirely in the browser, re
 
 ## Features
 
+- **Three world sizes.** Small (88 provinces, 6 nations, 150 turns), Standard (176, 8, 200) and Large (280, 10, 250), chosen at the start.
+- **Rivers and mountain passes.** Rivers run along province borders: crossing one costs extra movement and gives the defender a quarter more strength, making natural frontiers. Passes are the cheap route through a mountain range.
+- **Construction takes turns.** A province works on one project at a time. Gold is paid up front and cancelling refunds half.
+- **Province development.** Raise a province through five levels, each multiplying every yield it produces by 15%. A gold sink that lets a small realm play tall.
 - **Real-time 3D world.** Extruded hex terrain with forests, snow-capped peaks, animated water, sky, fog, soft shadows and drifting clouds. Cities grow as you build, walls rise, banners fly, troops stand guard, and armies march into battle with visible clashes.
 - **Objectives.** Twenty staged goals with gold rewards guide new players from their first farm to hegemony.
 - **Edicts.** One government edict per sphere (economy, military, society) with real trade-offs.

@@ -1,8 +1,8 @@
 import type { Army, BuildingKey, Difficulty, EconomyPolicy, GameState, MilitaryPolicy, PolicyCategory, SocietyPolicy, TechKey, UnitKey } from './types'
-import { POLICY_CHANGE_COST, POLICY_COOLDOWN, TECHS, TRADE_PRICES, UNITS } from './data'
+import { POLICY_CHANGE_COST, POLICY_COOLDOWN, TECHS, TRADE_PRICES, UNITS, developmentCost, type MapSize } from './data'
 import { checkObjectives } from './objectives'
 import { cloneState, log, playerNation } from './helpers'
-import { buildingCost, canBuild, canRecruit, pay, unitCost } from './economy'
+import { buildTurns, buildingCost, canBuild, canDevelop, canRecruit, developTurns, pay, unitCost } from './economy'
 import { aiAcceptsAlliance, aiAcceptsPeace, atWar, breakAlliance, changeRelation, declareWar, formAlliance, makePeace } from './diplomacy'
 import { canArmyAttack, performArmyAttack } from './military'
 import { applyEventChoice } from './events'
@@ -11,9 +11,11 @@ import { createGame } from './world'
 import { armiesOf, armyById, canBesiege, disbandIntoGarrison, mergeArmies, moveArmy, raiseArmy, splitArmy, startSiege } from './armies'
 
 export type Action =
-  | { type: 'NEW_GAME'; seed: number; playerName: string; difficulty: Difficulty }
+  | { type: 'NEW_GAME'; seed: number; playerName: string; difficulty: Difficulty; size?: MapSize }
   | { type: 'LOAD'; state: GameState }
   | { type: 'BUILD'; provinceId: number; building: BuildingKey }
+  | { type: 'DEVELOP'; provinceId: number }
+  | { type: 'CANCEL_CONSTRUCTION'; provinceId: number }
   | { type: 'RECRUIT'; provinceId: number; unit: UnitKey; count: number }
   | { type: 'DISBAND'; provinceId: number; unit: UnitKey; count: number }
   | { type: 'RAISE_ARMY'; provinceId: number; units: Army }
@@ -84,8 +86,28 @@ function applyAction(state: GameState, action: Action): GameState | null {
       const p = s.provinces[action.provinceId]
       if (!canBuild(s, player, p, action.building).ok) return state
       pay(player, buildingCost(player, action.building))
-      p.buildings[action.building] += 1
-      player.stats.built += 1
+      const total = buildTurns(player, action.building)
+      p.construction = { kind: 'building', building: action.building, turnsLeft: total, total }
+      return s
+    }
+    case 'DEVELOP': {
+      const p = s.provinces[action.provinceId]
+      const check = canDevelop(player, p)
+      if (!check.ok) return state
+      player.resources.gold -= check.cost
+      const total = developTurns(player)
+      p.construction = { kind: 'development', turnsLeft: total, total }
+      return s
+    }
+    case 'CANCEL_CONSTRUCTION': {
+      const p = s.provinces[action.provinceId]
+      if (p.ownerId !== player.id || !p.construction) return state
+      // Half the outlay comes back; the rest is sunk into foundations.
+      const refund = p.construction.kind === 'building'
+        ? buildingCost(player, p.construction.building).gold / 2
+        : developmentCost(p.development) / 2
+      player.resources.gold += Math.floor(refund)
+      p.construction = null
       return s
     }
     case 'RECRUIT': {

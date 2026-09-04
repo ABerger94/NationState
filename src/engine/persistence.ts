@@ -16,6 +16,8 @@ export function migrate(raw: GameState): GameState {
   const s = raw
   s.objectives ??= []
   s.armies ??= []
+  s.maxTurns ??= 150
+  for (const p of s.provinces) { p.rivers ??= []; p.pass ??= false; p.development ??= 1; p.construction ??= null }
   for (const a of s.armies) { a.siege ??= null; a.order ??= null }
   for (const n of s.nations) {
     n.policies ??= defaultPolicies()

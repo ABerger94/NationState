@@ -184,6 +184,10 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
           </ul>
         </section>
         <section>
+          <h3>Building and development</h3>
+          <p>A province works on <b>one project at a time</b> and it takes several turns. Gold is paid when you order it; cancelling refunds half. Beyond buildings you can raise a province's <b>development</b>, which multiplies every yield it produces by 15% a level, up to five. Engineering shortens every project by a turn.</p>
+          <h3>Terrain features</h3>
+          <p><b>Rivers</b> run along province borders. Crossing one costs an extra movement point and gives the defender a quarter more strength, so they make natural frontiers. A <b>mountain pass</b> is the cheap way through a range: without one, mountains cost three movement to enter.</p>
           <h3>People and food</h3>
           <p>Population grows when fed and content. It is your tax base and your recruiting pool. Every unit levies 100 people. Food is eaten every turn; run out and famine kills people and stokes unrest. Farms raise food and capacity, granaries raise storage.</p>
           <h3>Gold and stability</h3>

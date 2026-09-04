@@ -48,15 +48,56 @@ describe('battles', () => {
 })
 
 describe('reducer', () => {
-  it('building deducts cost and raises the level', () => {
+  it('building costs gold up front and finishes after its build time', () => {
     const s = newGame()
     const player = playerNation(s)
     const cap = s.provinces[player.capitalId]
     const cost = buildingCost(player, 'farm')
-    const next = reducer(s, { type: 'BUILD', provinceId: cap.id, building: 'farm' }) as GameState
-    expect(next.provinces[cap.id].buildings.farm).toBe(cap.buildings.farm + 1)
-    // The first construction also completes the 'Lay the first stone' objective (+30 gold).
-    expect(next.nations[0].resources.gold).toBe(player.resources.gold - cost.gold + 30)
+    const before = cap.buildings.farm
+    let next = reducer(s, { type: 'BUILD', provinceId: cap.id, building: 'farm' }) as GameState
+    // Paid immediately, queued rather than raised.
+    expect(next.nations[0].resources.gold).toBe(player.resources.gold - cost.gold)
+    expect(next.provinces[cap.id].buildings.farm).toBe(before)
+    expect(next.provinces[cap.id].construction).toMatchObject({ kind: 'building', building: 'farm' })
+    // A province works on one thing at a time.
+    expect(reducer(next, { type: 'BUILD', provinceId: cap.id, building: 'mine' })).toBe(next)
+    const turns = next.provinces[cap.id].construction!.total
+    for (let i = 0; i < turns; i++) {
+      if (next.pendingEvent) next = reducer(next, { type: 'RESOLVE_EVENT', choice: 0 }) as GameState
+      next = endTurn(next)
+    }
+    expect(next.provinces[cap.id].buildings.farm).toBe(before + 1)
+    expect(next.provinces[cap.id].construction).toBeNull()
+  })
+
+  it('cancelling construction refunds half the gold', () => {
+    const s = newGame()
+    const player = playerNation(s)
+    const cap = s.provinces[player.capitalId]
+    const cost = buildingCost(player, 'farm')
+    let next = reducer(s, { type: 'BUILD', provinceId: cap.id, building: 'farm' }) as GameState
+    next = reducer(next, { type: 'CANCEL_CONSTRUCTION', provinceId: cap.id }) as GameState
+    expect(next.provinces[cap.id].construction).toBeNull()
+    expect(next.nations[0].resources.gold).toBe(player.resources.gold - cost.gold + Math.floor(cost.gold / 2))
+  })
+
+  it('development takes turns and lifts every yield', async () => {
+    const { provinceOutput } = await import('./economy')
+    const s = newGame()
+    const player = playerNation(s)
+    const cap = s.provinces[player.capitalId]
+    player.resources.gold = 5000
+    const perPopBefore = provinceOutput(s, cap).food / cap.population
+    let next = reducer(s, { type: 'DEVELOP', provinceId: cap.id }) as GameState
+    expect(next.provinces[cap.id].construction).toMatchObject({ kind: 'development' })
+    const turns = next.provinces[cap.id].construction!.total
+    for (let i = 0; i < turns; i++) {
+      if (next.pendingEvent) next = reducer(next, { type: 'RESOLVE_EVENT', choice: 0 }) as GameState
+      next = endTurn(next)
+    }
+    expect(next.provinces[cap.id].development).toBe(2)
+    const after = provinceOutput(next, next.provinces[cap.id])
+    expect(after.food / next.provinces[cap.id].population).toBeGreaterThan(perPopBefore)
   })
   it('rejects attacks on nations you are not at war with', () => {
     const s = newGame()
@@ -147,9 +188,14 @@ describe('objectives, edicts and migration', () => {
     const player = playerNation(s)
     const cap = s.provinces[player.capitalId]
     const gold = player.resources.gold
-    const next = reducer(s, { type: 'BUILD', provinceId: cap.id, building: 'farm' }) as GameState
+    let next = reducer(s, { type: 'BUILD', provinceId: cap.id, building: 'farm' }) as GameState
+    const turns = next.provinces[cap.id].construction!.total
+    for (let i = 0; i < turns; i++) {
+      if (next.pendingEvent) next = reducer(next, { type: 'RESOLVE_EVENT', choice: 0 }) as GameState
+      next = endTurn(next)
+    }
     expect(next.objectives.map((o) => o.id)).toContain('build-1')
-    expect(next.nations[0].resources.gold).toBe(gold - buildingCost(player, 'farm').gold + 30)
+    expect(next.nations[0].resources.gold).toBeGreaterThan(gold - buildingCost(player, 'farm').gold)
   })
   it('first edict is free, the second change costs gold and waits for the cooldown', () => {
     const s = newGame()
@@ -256,7 +302,7 @@ describe('sieges, supply and retreat', () => {
     expect(army.movement).toBe(0)
     const required = siegeRequired(g.provinces[target.id], army.units)
     expect(required).toBe(4)
-    for (let i = 0; i < required; i++) {
+    for (let i = 0; i < required * 3; i++) {
       if (g.pendingEvent) g = reducer(g, { type: 'RESOLVE_EVENT', choice: 0 }) as GameState
       g = endTurn(g)
       if (g.provinces[target.id].ownerId === 0) break

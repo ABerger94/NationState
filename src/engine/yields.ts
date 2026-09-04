@@ -95,6 +95,7 @@ export function suggestBuilding(state: GameState, n: Nation, p: Province): Sugge
 export function bestBuildAcrossRealm(state: GameState, n: Nation): { provinceId: number; suggestion: Suggestion } | null {
   let best: { provinceId: number; suggestion: Suggestion } | null = null
   for (const p of ownedProvinces(state, n.id)) {
+    if (p.construction) continue
     const s = suggestBuilding(state, n, p)
     if (!s || !canAfford(n.resources, buildingCost(n, s.key))) continue
     if (!best || s.perGold > best.suggestion.perGold) best = { provinceId: p.id, suggestion: s }
