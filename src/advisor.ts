@@ -4,7 +4,7 @@ import { armyPower, armySize, ownedProvinces, playerNation } from './engine/help
 import { attackPower, defensePower } from './engine/military'
 import { atWar } from './engine/diplomacy'
 import { bestBuildAcrossRealm, describeGain } from './engine/yields'
-import { armiesOf } from './engine/armies'
+import { armiesOf, besiegersOf, defendersAt } from './engine/armies'
 import { canArmyAttack } from './engine/military'
 import { BUILDINGS } from './engine/data'
 import { buildingCost } from './engine/economy'
@@ -56,6 +56,37 @@ export function getAdvice(state: GameState): Advice[] {
         if (ratio > 1.1 && (!worstThreat || ratio > worstThreat.ratio)) worstThreat = { p, enemy: enemy.name, ratio }
       }
       if (armySize(p.garrison) === 0 && enemy && !undefended) undefended = p
+    }
+  }
+
+  // The AI concentrates its hosts, so warn when one is gathering against us.
+  let massing: { p: typeof provs[number]; power: number; count: number } | null = null
+  for (const p of provs) {
+    let power = 0
+    let count = 0
+    for (const a of state.armies) {
+      if (a.ownerId === player.id) continue
+      if (!atWar(player, state.nations[a.ownerId])) continue
+      if (!state.provinces[a.provinceId].neighbors.includes(p.id) && a.provinceId !== p.id) continue
+      power += armyPower(a.units)
+      count += 1
+    }
+    if (count === 0) continue
+    const held = defensePower(defendersAt(state, p.id).units, player, p, 0)
+    if (power > held && (!massing || power > massing.power)) massing = { p, power, count }
+  }
+  if (massing) {
+    out.push({
+      id: 'massing', level: 'danger',
+      text: `${massing.count} enemy ${massing.count === 1 ? 'army is' : 'armies are'} massing against ${massing.p.name}, and the defence there will not hold. Reinforce it or march to meet them.`,
+      provinceId: massing.p.id, tab: 'province',
+    })
+  }
+  for (const p of provs) {
+    const siegers = besiegersOf(state, p.id).filter((a) => a.ownerId !== player.id)
+    if (siegers.length) {
+      out.push({ id: 'besieged', level: 'danger', text: `${p.name} is under siege. Its walls will not hold forever: relieve it or the province is lost.`, provinceId: p.id, tab: 'province' })
+      break
     }
   }
 

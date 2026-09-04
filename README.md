@@ -22,6 +22,7 @@ A turn-based nation building strategy game that runs entirely in the browser, re
 - **Twelve technologies**, with prerequisites, that shape your economy and army.
 - **Random events** with meaningful choices, plus rebellions in restless provinces.
 - **AI nations** with four personalities (aggressive, builder, mercantile, defensive) that build, research, recruit, expand into tribal lands, declare wars, sue for peace and form alliances among themselves.
+- **AI campaigns.** Rival nations assess the threat to each province, draw up capture and defence objectives each turn, and give every army a standing order it keeps across turns. Several armies converge on a target too strong for one, co-located armies merge, fortresses are invested rather than stormed, and threatened provinces pull armies home.
 - **Three ways to win:** hold 60% of the map, destroy every rival, or top the scoreboard at turn 150.
 - Deterministic seeded worlds and automatic saving to the browser.
 

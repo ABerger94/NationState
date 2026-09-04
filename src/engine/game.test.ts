@@ -317,6 +317,59 @@ describe('sieges, supply and retreat', () => {
   })
 })
 
+describe('AI campaigns', () => {
+  it('gives armies standing orders, concentrates on hard targets and defends threatened land', () => {
+    let s: GameState = newGame(77)
+    let sawConcentration = false
+    let sawDefence = false
+    let ordered = 0
+    let total = 0
+    let changes = 0
+    let prev = new Map<number, number>()
+    for (let i = 0; i < 45 && !s.gameOver; i++) {
+      if (s.pendingEvent) s = reducer(s, { type: 'RESOLVE_EVENT', choice: 0 }) as GameState
+      s = endTurn(s)
+      const byTarget = new Map<string, number>()
+      const now = new Map<number, number>()
+      for (const a of s.armies) {
+        total++
+        if (!a.order) continue
+        ordered++
+        now.set(a.id, a.order.provinceId)
+        if (prev.get(a.id) !== undefined && prev.get(a.id) !== a.order.provinceId) changes++
+        // Orders must always point at a real province, and defence only at our own land.
+        expect(s.provinces[a.order.provinceId]).toBeDefined()
+        if (a.order.kind === 'defend') {
+          expect(s.provinces[a.order.provinceId].ownerId).toBe(a.ownerId)
+          sawDefence = true
+        }
+        const key = `${a.ownerId}:${a.order.provinceId}`
+        byTarget.set(key, (byTarget.get(key) ?? 0) + 1)
+      }
+      if ([...byTarget.values()].some((v) => v > 1)) sawConcentration = true
+      prev = now
+    }
+    expect(ordered / Math.max(1, total)).toBeGreaterThan(0.7)
+    expect(sawConcentration).toBe(true)
+    expect(sawDefence).toBe(true)
+    // Orders should mostly persist rather than flip every turn.
+    expect(changes / Math.max(1, ordered)).toBeLessThan(0.4)
+  })
+
+  it('leaves a competitive map rather than one runaway nation', () => {
+    for (const seed of [77, 909]) {
+      let s: GameState = newGame(seed)
+      for (let i = 0; i < 80 && !s.gameOver; i++) {
+        if (s.pendingEvent) s = reducer(s, { type: 'RESOLVE_EVENT', choice: 0 }) as GameState
+        s = endTurn(s)
+      }
+      const counts = s.nations.filter((n) => n.alive).map((n) => ownedProvinces(s, n.id).length).sort((a, b) => b - a)
+      expect(counts.length).toBeGreaterThanOrEqual(3)
+      expect(counts[0]).toBeLessThan(s.provinces.length * 0.5)
+    }
+  })
+})
+
 describe('yields', () => {
   it('reports what a farm adds and recommends a production building', async () => {
     const { buildingGain, suggestBuilding, yieldPer1k, landQuality, mapModeTile } = await import('./yields')

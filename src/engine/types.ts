@@ -32,6 +32,8 @@ export interface FieldArmy {
   morale: number
   /** A siege this army is pressing against an adjacent enemy province. */
   siege: { provinceId: number; progress: number } | null
+  /** Standing campaign order. Persists across turns so armies commit rather than wander. */
+  order: { kind: 'capture' | 'defend'; provinceId: number } | null
 }
 export type Resources = Record<Resource, number>
 

@@ -52,6 +52,7 @@ export function createArmy(state: GameState, ownerId: number, provinceId: number
     maxMovement,
     morale: 100,
     siege: null,
+    order: null,
   }
   state.armies.push(army)
   return army
