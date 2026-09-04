@@ -1,7 +1,8 @@
-import type { Army, BattleReport, GameState, Nation, Province, Terrain } from './types'
+import type { Army, BattleReport, FieldArmy, GameState, Nation, Province, Terrain } from './types'
 import { TERRAINS, UNIT_ORDER, UNITS } from './data'
-import { addArmy, armySize, clamp, describeArmy, emptyArmy, hasTech, log, nationHasResource, ownedProvinces, subArmy } from './helpers'
+import { addArmy, armySize, clamp, emptyArmy, hasTech, log, nationHasResource, ownedProvinces } from './helpers'
 import { computeStability } from './economy'
+import { applyDefenderLosses, armyById, breakSiege, defendersAt, moveCost, pruneArmies, removeArmy, retreatArmy, wallsBreached } from './armies'
 import { nextRand, pick } from './rng'
 
 export function attackPower(army: Army, n: Nation | null, terrain: Terrain, round: number, state?: GameState): number {
@@ -31,13 +32,13 @@ export function attackPower(army: Army, n: Nation | null, terrain: Terrain, roun
   return total
 }
 
-export function defensePower(army: Army, n: Nation | null, p: Province, attackerSiege: number): number {
+export function defensePower(army: Army, n: Nation | null, p: Province, attackerSiege: number, breached = 0): number {
   let total = 0
   for (const k of UNIT_ORDER) total += army[k] * UNITS[k].defense
   const t = TERRAINS[p.terrain]
   total *= t.defense
-  const wallBonus = hasTech(n, 'masonry') ? 0.45 : 0.3
-  const effWalls = Math.max(0, p.buildings.walls - attackerSiege * 0.5)
+  const wallBonus = hasTech(n, 'masonry') ? 0.65 : 0.45
+  const effWalls = Math.max(0, p.buildings.walls - attackerSiege * 0.5 - breached)
   total *= 1 + wallBonus * effWalls
   total *= 1 + 0.08 * p.buildings.barracks
   if (hasTech(n, 'tactics')) total *= 1.1
@@ -74,6 +75,8 @@ export interface BattleArgs {
   defender: Army
   province: Province
   kind: 'battle' | 'rebellion'
+  /** Wall levels already knocked down by a siege. */
+  breached?: number
 }
 
 export function resolveBattle(state: GameState, args: BattleArgs): BattleReport {
@@ -89,7 +92,7 @@ export function resolveBattle(state: GameState, args: BattleArgs): BattleReport 
 
   for (let r = 1; r <= 8 && winner === null; r++) {
     const A = attackPower(atk, an, args.province.terrain, r, state)
-    const D = defensePower(def, dn, args.province, atk.siege)
+    const D = defensePower(def, dn, args.province, atk.siege, args.breached ?? 0)
     if (A + D <= 0) break
     const aFrac = clamp((D / (A + D)) * 0.3 * (0.8 + 0.4 * nextRand(state)), 0, 0.9)
     const dFrac = clamp((A / (A + D)) * 0.3 * (0.8 + 0.4 * nextRand(state)), 0, 0.9)
@@ -154,6 +157,12 @@ export function checkElimination(state: GameState, nationId: number): void {
 }
 
 export function transferOwnership(state: GameState, p: Province, newOwner: number | null, garrison: Army): void {
+  // Any surviving armies of the previous owner are pushed out with the province.
+  for (const a of state.armies.filter((x) => x.provinceId === p.id && x.ownerId !== newOwner)) {
+    const refuge = p.neighbors.map((i) => state.provinces[i]).find((q) => q.ownerId === a.ownerId)
+    if (refuge) a.provinceId = refuge.id
+    else removeArmy(state, a.id)
+  }
   const prevOwner = p.ownerId
   p.ownerId = newOwner
   p.garrison = { ...garrison }
@@ -187,23 +196,31 @@ export function transferOwnership(state: GameState, p: Province, newOwner: numbe
   }
 }
 
-/** Launch an attack from one province against an adjacent one. Mutates state and returns the report. */
-export function performAttack(state: GameState, attackerId: number, fromId: number, toId: number, army: Army): BattleReport {
-  const from = state.provinces[fromId]
+/** A field army assaults an adjacent province. Mutates state and returns the report. */
+export function performArmyAttack(state: GameState, armyId: number, toId: number, fullyBreached = false): BattleReport | null {
+  const army = armyById(state, armyId)
+  if (!army) return null
   const to = state.provinces[toId]
+  const attackerId = army.ownerId
   const attacker = state.nations[attackerId]
   const defenderId = to.ownerId
   const defender = defenderId === null ? null : state.nations[defenderId]
+  const force = { ...army.units }
+  const defence = defendersAt(state, toId)
 
-  from.garrison = subArmy(from.garrison, army)
-  from.lockedTurn = state.turn
-
+  const breached = fullyBreached ? to.buildings.walls : wallsBreached(army, to)
   const report = resolveBattle(state, {
-    attackerId, defenderId, attacker: army, defender: { ...to.garrison }, province: to, kind: 'battle',
+    attackerId, defenderId, attacker: force, defender: { ...defence.units }, province: to, kind: 'battle', breached,
   })
 
+  army.units = { ...report.attackerEnd }
+  army.movement = 0
+  army.morale = Math.max(10, army.morale - (report.winner === 'attacker' ? 10 : 30))
+
   if (report.winner === 'attacker') {
-    const remnants = report.defenderEnd
+    // Survivors of the defence stream away to a neighbouring province of their nation.
+    applyDefenderLosses(state, toId, report.defenderEnd)
+    const remnants = { ...state.provinces[toId].garrison }
     if (defenderId !== null && armySize(remnants) > 0) {
       const refuge = to.neighbors.map((i) => state.provinces[i]).filter((p) => p.ownerId === defenderId && p.id !== to.id)
       if (refuge.length) {
@@ -211,7 +228,9 @@ export function performAttack(state: GameState, attackerId: number, fromId: numb
         r.garrison = addArmy(r.garrison, remnants)
       }
     }
-    transferOwnership(state, to, attackerId, report.attackerEnd)
+    transferOwnership(state, to, attackerId, emptyArmy())
+    army.provinceId = toId
+    breakSiege(army)
     report.conquered = true
     attacker.stats.battlesWon += 1
     attacker.warWeariness = Math.min(100, attacker.warWeariness + 1)
@@ -224,20 +243,34 @@ export function performAttack(state: GameState, attackerId: number, fromId: numb
         }
       }
     }
-    log(state, 'battle', `${attacker.name} storms ${to.name} (${report.defenderName}) with ${describeArmy(army)} and takes it.`)
+    log(state, 'battle', `${attacker.name}'s ${army.name} storms ${to.name} (${report.defenderName}) and takes it.`)
   } else {
-    from.garrison = addArmy(from.garrison, report.attackerEnd)
-    to.garrison = { ...report.defenderEnd }
+    applyDefenderLosses(state, toId, report.defenderEnd)
     attacker.warWeariness = Math.min(100, attacker.warWeariness + 4)
     if (defender) {
       defender.warWeariness = Math.min(100, defender.warWeariness + 2)
       defender.stats.defensiveWins += 1
       defender.stats.battlesWon += 1
     }
-    log(state, 'battle', `${attacker.name} assaults ${to.name} (${report.defenderName}) with ${describeArmy(army)} and is repulsed.`)
+    const broke = army.morale < 30 && retreatArmy(state, army)
+    log(state, 'battle', `${attacker.name}'s ${army.name} assaults ${to.name} (${report.defenderName}) and is thrown back${broke ? ', falling back in disorder' : ''}.`)
   }
+  pruneArmies(state)
   recordBattle(state, report)
   return report
+}
+
+/** Whether an army may attack a given province this turn. */
+export function canArmyAttack(state: GameState, army: FieldArmy, toId: number): { ok: boolean; reason: string } {
+  if (army.movement < moveCost(state.provinces[toId])) return { ok: false, reason: 'Not enough movement left' }
+  if (!state.provinces[army.provinceId].neighbors.includes(toId)) return { ok: false, reason: 'Not adjacent' }
+  if (armySize(army.units) === 0) return { ok: false, reason: 'No troops' }
+  const to = state.provinces[toId]
+  if (to.ownerId === army.ownerId) return { ok: false, reason: 'Already yours' }
+  if (to.ownerId !== null && !state.nations[army.ownerId].wars.includes(to.ownerId)) {
+    return { ok: false, reason: `Not at war with ${state.nations[to.ownerId].name}` }
+  }
+  return { ok: true, reason: '' }
 }
 
 export function resolveRebellion(state: GameState, p: Province): BattleReport | null {
@@ -246,16 +279,17 @@ export function resolveRebellion(state: GameState, p: Province): BattleReport | 
   const owner = state.nations[ownerId]
   const rebels: Army = { ...emptyArmy(), militia: Math.max(2, Math.round(p.population / 1500)) }
   const report = resolveBattle(state, {
-    attackerId: null, defenderId: ownerId, attacker: rebels, defender: { ...p.garrison }, province: p, kind: 'rebellion',
+    attackerId: null, defenderId: ownerId, attacker: rebels, defender: { ...defendersAt(state, p.id).units }, province: p, kind: 'rebellion',
   })
   if (report.winner === 'attacker') {
     const wasCapital = p.isCapital
+    applyDefenderLosses(state, p.id, emptyArmy())
     transferOwnership(state, p, null, report.attackerEnd)
     p.unrest = 20
     log(state, 'war', `Rebellion in ${p.name}! The province has thrown off ${owner.name}'s rule${wasCapital ? ' and the capital is lost' : ''}.`)
     report.conquered = true
   } else {
-    p.garrison = { ...report.defenderEnd }
+    applyDefenderLosses(state, p.id, report.defenderEnd)
     p.unrest = Math.max(0, p.unrest - 35)
     log(state, 'war', `An uprising in ${p.name} was crushed by the ${owner.name} garrison.`)
   }

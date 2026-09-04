@@ -2,10 +2,11 @@ import type { GameState } from '../engine/types'
 import { UNITS, UNIT_ORDER } from '../engine/data'
 import { armyPower, armySize, describeArmy, fmt, nationArmy, ownedProvinces, playerNation } from '../engine/helpers'
 import { nationBudget } from '../engine/economy'
+import { armiesOf, describeFieldArmy } from '../engine/armies'
 
-interface Props { state: GameState; onSelect: (id: number) => void; onShowBattle: (id: number) => void }
+interface Props { state: GameState; onSelect: (id: number) => void; onShowBattle: (id: number) => void; onSelectArmy?: (id: number) => void }
 
-export function MilitaryPanel({ state, onSelect, onShowBattle }: Props) {
+export function MilitaryPanel({ state, onSelect, onShowBattle, onSelectArmy }: Props) {
   const player = playerNation(state)
   const army = nationArmy(state, player.id)
   const budget = nationBudget(state, player)
@@ -23,6 +24,23 @@ export function MilitaryPanel({ state, onSelect, onShowBattle }: Props) {
           <tr><td><b>Total</b></td><td className="num"><b>{armySize(army)}</b></td><td className="num" colSpan={2}>strength {Math.round(armyPower(army))} · {fmt(budget.unitGold)} gold/turn</td></tr>
         </tbody>
       </table>
+
+      <h3>Field armies</h3>
+      {armiesOf(state, player.id).length === 0 ? (
+        <p className="muted small">No field armies. Garrisons defend where they stand; raise an army in a province to march and attack.</p>
+      ) : (
+        <table className="tbl">
+          <tbody>
+            {armiesOf(state, player.id).map((a) => (
+              <tr key={a.id} className="clickable" onClick={() => onSelectArmy?.(a.id)}>
+                <td><b>{a.name}</b><div className="muted small">{describeFieldArmy(a)}</div></td>
+                <td className="small">in {state.provinces[a.provinceId].name}</td>
+                <td className="num small"><span className={a.movement > 0 ? 'ok' : 'muted'}>{a.movement}/{a.maxMovement}</span><div className="muted">morale {Math.round(a.morale)}</div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <h3>Garrisons</h3>
       <table className="tbl">

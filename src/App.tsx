@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { reducer, attackTargets, type Action } from './engine/actions'
-import type { Army, GameState } from './engine/types'
+import { reducer, armyAttackTargets, allAttackTargets, type Action } from './engine/actions'
+import type { GameState } from './engine/types'
 import { loadGame, saveGame } from './engine/persistence'
-import { armySize, playerNation, yearOf } from './engine/helpers'
+import { playerNation, yearOf } from './engine/helpers'
 import { WorldMap, type Focus } from './three/WorldMap'
 import type { Fx } from './three/Effects'
 import { TopBar } from './ui/TopBar'
 import { Toasts, type Toast } from './ui/Toasts'
 import { Advisor } from './ui/Advisor'
 import { Legend } from './ui/Legend'
-import { QuickBar, bestSourceFor } from './ui/QuickBar'
+import { QuickBar } from './ui/QuickBar'
+import { ArmyBar } from './ui/ArmyBar'
+import { armiesOf, armyById, reachable } from './engine/armies'
 import { Objectives } from './ui/Objectives'
 import { Chevron } from './ui/icons'
 import { getAdvice, type Advice } from './advisor'
@@ -50,14 +52,13 @@ export default function App() {
   const [state, dispatch] = useReducer(reducer, null, loadGame)
   const [selected, setSelected] = useState<number | null>(null)
   const [attackTarget, setAttackTarget] = useState<number | null>(null)
-  const [attackPreset, setAttackPreset] = useState<number | null>(null)
+  const [selectedArmy, setSelectedArmy] = useState<number | null>(null)
   const isMobile = useIsMobile()
   const [tab, setTab] = useState<Tab>('province')
   const [panelOpen, setPanelOpen] = useState(() => !(typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches))
   const [battleId, setBattleId] = useState<number | null>(null)
   const [showReport, setShowReport] = useState(false)
   const [confirmNew, setConfirmNew] = useState(false)
-  const [transferTarget, setTransferTarget] = useState<number | null>(null)
   const [dismissedGameOver, setDismissedGameOver] = useState(false)
   const [focus, setFocus] = useState<Focus | null>(null)
   const [fx, setFx] = useState<Fx[]>([])
@@ -71,7 +72,7 @@ export default function App() {
 
   const fxId = useRef(1)
   const toastId = useRef(1)
-  const pendingAttack = useRef<{ fxId: number; from: number; to: number; army: Army } | null>(null)
+  const pendingAttack = useRef<{ fxId: number; armyId: number; toId: number } | null>(null)
   const expectBattle = useRef(false)
   const prevState = useRef<GameState | null>(state)
   const idleCursor = useRef(0)
@@ -97,7 +98,13 @@ export default function App() {
     if (isMobile) setPanelOpen(false)
   }, [isMobile])
 
-  const openSection = useCallback((section: 'build' | 'recruit' | 'attack' | 'move') => {
+  const selectArmy = useCallback((id: number) => {
+    setSelectedArmy(id)
+    setAttackTarget(null)
+    setTab('province')
+  }, [])
+
+  const openSection = useCallback((section: 'build' | 'recruit' | 'armies' | 'raise') => {
     setTab('province')
     setPanelOpen(true)
     setTimeout(() => scrollPanelTo('sec-' + section), 60)
@@ -116,6 +123,7 @@ export default function App() {
       setTab('province')
       setDismissedGameOver(false)
       setFocus(isMobile ? { id: player.capitalId, nonce: Date.now() } : null)
+      setSelectedArmy(null)
       if (isMobile) setPanelOpen(false)
     } else if (selected === null || selected >= state.provinces.length) {
       setSelected(player.capitalId)
@@ -171,24 +179,35 @@ export default function App() {
     if (pa && pa.fxId === id) {
       pendingAttack.current = null
       expectBattle.current = true
-      dispatch({ type: 'ATTACK', from: pa.from, to: pa.to, army: pa.army })
+      dispatch({ type: 'ARMY_ATTACK', armyId: pa.armyId, toId: pa.toId })
     }
   }, [])
 
-  const startAttack = useCallback((from: number, to: number, army: Army) => {
-    if (pendingAttack.current) return
+  const startArmyAttack = useCallback((armyId: number, toId: number) => {
+    if (!state || pendingAttack.current) return
+    const a = armyById(state, armyId)
+    if (!a) return
     audio.play('march')
     setBusy(true)
     setAttackTarget(null)
-    setAttackPreset(null)
-    const id = addFx({ kind: 'march', from, to, color: '#3d8bff', duration: 1200 })
-    pendingAttack.current = { fxId: id, from, to, army }
-  }, [addFx])
+    const id = addFx({ kind: 'march', from: a.provinceId, to: toId, color: state.nations[a.ownerId].color, duration: 1100 })
+    pendingAttack.current = { fxId: id, armyId, toId }
+  }, [state, addFx])
+
+  const startMove = useCallback((armyId: number, destId: number) => {
+    if (!state) return
+    const a = armyById(state, armyId)
+    if (!a) return
+    audio.play('march')
+    addFx({ kind: 'march', from: a.provinceId, to: destId, color: state.nations[a.ownerId].color, duration: 700 })
+    dispatch({ type: 'MOVE_ARMY', armyId, destId })
+    setSelected(destId)
+  }, [state, addFx])
 
   const act = useCallback((a: Action) => {
     switch (a.type) {
-      case 'ATTACK': startAttack(a.from, a.to, a.army); return
       case 'BUILD': audio.play('build'); break
+      case 'RAISE_ARMY': audio.play('recruit'); break
       case 'RECRUIT': audio.play('recruit'); break
       case 'TRADE': case 'SEND_GIFT': audio.play('coin'); break
       case 'DECLARE_WAR': audio.play('war'); break
@@ -196,45 +215,54 @@ export default function App() {
       default: audio.play('click')
     }
     dispatch(a)
-  }, [startAttack])
+  }, [])
 
   const endTurn = useCallback(() => {
     if (!state || state.pendingEvent || state.gameOver || pendingAttack.current) return
     audio.play('endTurn')
-    setTransferTarget(null)
     setAttackTarget(null)
     setYearOverlay(yearOf(state) + 1)
     dispatch({ type: 'END_TURN' })
   }, [state])
 
-  const targets = useMemo(() => (state && selected !== null ? attackTargets(state, selected) : []), [state, selected])
+  const army = state && selectedArmy !== null ? armyById(state, selectedArmy) : null
+  const reach = useMemo(() => (state && army ? [...reachable(state, army).keys()] : []), [state, army])
+  const targets = useMemo(() => {
+    if (!state) return []
+    if (army) return armyAttackTargets(state, army.id)
+    return allAttackTargets(state)
+  }, [state, army])
   const advice = useMemo(() => (state ? getAdvice(state) : []), [state])
   const idleArmies = useMemo(() => {
     if (!state) return []
-    const player = playerNation(state)
-    return state.provinces.filter((p) => p.ownerId === player.id && p.lockedTurn !== state.turn && armySize(p.garrison) - p.garrison.militia >= 2 && attackTargets(state, p.id).length > 0).map((p) => p.id)
+    return armiesOf(state, playerNation(state).id).filter((a) => a.movement > 0).map((a) => a.id)
   }, [state])
 
   const nextArmy = useCallback(() => {
-    if (!idleArmies.length) return
+    if (!state || !idleArmies.length) return
     idleCursor.current = (idleCursor.current + 1) % idleArmies.length
-    focusOn(idleArmies[idleCursor.current])
-    setTab('province')
-  }, [idleArmies, focusOn])
+    const id = idleArmies[idleCursor.current]
+    const a = armyById(state, id)
+    if (!a) return
+    selectArmy(id)
+    setSelected(a.provinceId)
+    setFocus({ id: a.provinceId, nonce: Date.now() })
+  }, [state, idleArmies, selectArmy])
 
   const onMapSelect = useCallback((id: number) => {
     if (!state) return
-    if (selected !== null && targets.includes(id)) {
-      setAttackTarget(id)
-      audio.play('click')
-      return
+    if (army) {
+      if (targets.includes(id)) { setAttackTarget(id); audio.play('click'); return }
+      if (reach.includes(id)) { startMove(army.id, id); return }
     }
     setSelected(id)
+    setSelectedArmy(null)
     setAttackTarget(null)
     setTab('province')
     if (isMobile) setPanelOpen(false)
     audio.play('click')
-  }, [state, selected, targets, isMobile])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, army, targets, reach, isMobile])
 
   const anyModal = battleId !== null || showReport || confirmNew || showHelp || showIntro || !!state?.pendingEvent || (state?.gameOver && !dismissedGameOver)
 
@@ -248,6 +276,7 @@ export default function App() {
         else if (showReport) setShowReport(false)
         else if (confirmNew) setConfirmNew(false)
         else if (attackTarget !== null) setAttackTarget(null)
+        else if (selectedArmy !== null) setSelectedArmy(null)
         return
       }
       if (e.key === '?') { setShowHelp((h) => !h); return }
@@ -262,7 +291,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [anyModal, battleId, showReport, confirmNew, showHelp, attackTarget, endTurn, focusOn, nextArmy, state, isMobile])
+  }, [anyModal, battleId, showReport, confirmNew, showHelp, attackTarget, selectedArmy, endTurn, focusOn, nextArmy, state, isMobile])
 
   if (!state) {
     return <NewGameScreen onStart={(o) => { audio.play('build'); dispatch({ type: 'NEW_GAME', ...o }) }} />
@@ -271,7 +300,7 @@ export default function App() {
   const player = playerNation(state)
   const province = selected !== null ? state.provinces[selected] : null
   const battle = battleId !== null ? state.battles.find((b) => b.id === battleId) ?? null : null
-  const highlight = transferTarget !== null ? [transferTarget] : []
+  const highlight = reach
   const hasPeaceOffer = player.peaceOffersFrom.length > 0
   const warnings = advice.filter((a) => a.level === 'danger' || a.level === 'warn').length
 
@@ -285,7 +314,7 @@ export default function App() {
     <div className="app">
       <WorldMap
         state={state} selected={selected} targets={targets} highlight={highlight} focus={focus}
-        attackTarget={attackTarget}
+        attackTarget={attackTarget} selectedArmy={selectedArmy} onSelectArmy={selectArmy}
         fx={fx} onFxDone={onFxDone} interactive compact={isMobile} mapMode={mapMode}
         onSelect={onMapSelect}
       />
@@ -323,13 +352,13 @@ export default function App() {
           {tab === 'province' && (
             <ProvincePanel
               state={state} province={province} dispatch={act} onSelect={focusOn} onFocus={focusOn}
-              transferTarget={transferTarget} setTransferTarget={setTransferTarget}
-              attackPreset={attackPreset} onDiplomacy={() => setTab('diplomacy')}
+              onDiplomacy={() => setTab('diplomacy')}
+              selectedArmy={selectedArmy} onSelectArmy={selectArmy}
             />
           )}
           {tab === 'nation' && <NationPanel state={state} dispatch={act} onFocus={focusOn} />}
           {tab === 'diplomacy' && <DiplomacyPanel state={state} dispatch={act} />}
-          {tab === 'military' && <MilitaryPanel state={state} onSelect={(id) => { focusOn(id); setTab('province') }} onShowBattle={setBattleId} />}
+          {tab === 'military' && <MilitaryPanel state={state} onSelect={(id) => { focusOn(id); setTab('province') }} onShowBattle={setBattleId} onSelectArmy={(id) => { const a = armyById(state, id); if (a) { selectArmy(id); focusOn(a.provinceId) } }} />}
           {tab === 'log' && <LogPanel state={state} />}
           {tab === 'goals' && <GoalsPanel state={state} advice={advice} onAdvice={onAdvice} onFocusNation={(id) => { focusOn(state.nations[id].capitalId); setPanelOpen(false) }} />}
         </div>
@@ -344,16 +373,25 @@ export default function App() {
           <Legend state={state} onFocusNation={(id) => focusOn(state.nations[id].capitalId)} />
         </>
       )}
-      <QuickBar
-        state={state} selected={selected} attackTarget={attackTarget}
-        onAttack={(from, to, army) => startAttack(from, to, army)}
-        onCancelAttack={() => setAttackTarget(null)}
-        onCustomise={(target) => { setAttackPreset(target); setAttackTarget(null); openSection('attack') }}
-        onSection={openSection}
-        onDiplomacy={() => { setTab('diplomacy'); setPanelOpen(true) }}
-        onFocus={focusOn}
-        onPickSource={(target) => { const src = bestSourceFor(state, target); if (src !== null) { setSelected(src); setAttackTarget(target) } }}
-      />
+      {army ? (
+        <ArmyBar
+          state={state} armyId={army.id} attackTarget={attackTarget} dispatch={act}
+          onAttack={startArmyAttack}
+          onBesiege={(id, toId) => { audio.play('build'); dispatch({ type: 'BESIEGE', armyId: id, toId }); setAttackTarget(null) }}
+          onCancelAttack={() => setAttackTarget(null)}
+          onDeselect={() => { setSelectedArmy(null); setAttackTarget(null) }}
+          onFocus={focusOn}
+        />
+      ) : (
+        <QuickBar
+          state={state} selected={selected}
+          onSection={openSection}
+          onDiplomacy={() => { setTab('diplomacy'); setPanelOpen(true) }}
+          onFocus={focusOn}
+          onSelectArmy={(id) => { selectArmy(id); setPanelOpen(isMobile ? false : panelOpen) }}
+          onPlanAttack={(armyId, toId) => { selectArmy(armyId); setAttackTarget(toId) }}
+        />
+      )}
       <Toasts toasts={toasts} onDismiss={(id) => setToasts((l) => l.filter((t) => t.id !== id))} />
       </div>
 

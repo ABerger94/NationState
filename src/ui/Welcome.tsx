@@ -2,7 +2,7 @@ import { isMobileNow } from './useIsMobile'
 
 const MOBILE_STEPS = [
   { glyph: '⬢', title: 'The map', text: 'Your realm is blue with a beacon over the capital. Tap a hex to select it. Drag with one finger to pan, pinch to zoom, two fingers to rotate.' },
-  { glyph: '⚑', title: 'Action bar', text: 'Appears above the tabs when a province is selected. Build, recruit, move, or attack. Tap a red-ringed neighbour to line up an attack.' },
+  { glyph: '⚑', title: 'Armies', text: 'Recruit troops, then raise an army from the garrison. Tap the army to command it, then tap a blue tile to march or a red one to attack.' },
   { glyph: '☰', title: 'Tabs', text: 'Along the bottom. Tap one to open it; tap it again to hide the panel and see the map. Goals holds your objectives and advisor.' },
   { glyph: '◈', title: 'Objectives', text: 'In the Goals tab. Three goals at a time, each paying gold. Follow them and you will learn the game as you go.' },
   { glyph: '↵', title: 'End turn', text: 'Top right. The world moves, then you get a short report of what happened to you.' },
@@ -11,9 +11,9 @@ const MOBILE_STEPS = [
 const STEPS = [
   { glyph: '◈', title: 'Objectives and Advisor', text: 'Top left. Your next three goals, each paying gold, and an advisor who warns you before things go wrong.' },
   { glyph: '⬢', title: 'The map', text: 'Your realm is blue with a beacon over the capital. Click any hex to select it. Left-drag pans, right-drag rotates, scroll zooms.' },
-  { glyph: '⚑', title: 'Action bar', text: 'Bottom centre. Build, recruit, move or attack from the selected province. Click a red-ringed neighbour to line up an attack.' },
+  { glyph: '⚑', title: 'Armies', text: 'Recruit troops, then raise an army from the garrison. Click the army to command it, then click a blue tile to march or a red one to attack.' },
   { glyph: '☰', title: 'Panels', text: 'Right side. Province details, your nation\'s treasury, research and edicts, diplomacy, military and the chronicle.' },
-  { glyph: '↵', title: 'End turn', text: 'Top right, or press Enter. The world moves, then you get a short report of what happened to you.' },
+  { glyph: '↵', title: 'End turn', text: 'Top right, or press Enter. Sieges grind on, armies eat, and the world moves. Then you get a short report.' },
 ]
 
 export function Welcome({ onClose }: { onClose: () => void }) {

@@ -1,10 +1,11 @@
 import type { GameState, Nation } from './types'
 import { CONQUEST_SHARE, MAX_TURNS, TECHS, UNIT_ORDER } from './data'
-import { cloneState, log, ownedProvinces, playerNation } from './helpers'
+import { armySize, cloneState, log, ownedProvinces, playerNation } from './helpers'
 import { nationBudget, nationScore } from './economy'
 import { growProvince, growTribal, updateUnrest } from './population'
 import { runAI } from './ai'
-import { resolveRebellion, checkElimination } from './military'
+import { resolveRebellion, checkElimination, performArmyAttack } from './military'
+import { advanceSieges, applyAttrition, pruneArmies, refreshMovement } from './armies'
 import { rollEvent } from './events'
 import { checkObjectives } from './objectives'
 import { nextRand } from './rng'
@@ -37,6 +38,14 @@ function processEconomy(state: GameState, n: Nation): void {
       }
       p.unrest = Math.min(100, p.unrest + 5)
     }
+    for (const a of state.armies.filter((x) => x.ownerId === n.id)) {
+      for (const k of UNIT_ORDER) {
+        const d = Math.ceil(a.units[k] * 0.1)
+        a.units[k] -= d
+        deserted += d
+      }
+      a.morale = Math.max(10, a.morale - 15)
+    }
     if (deserted > 0) log(state, 'economy', `${n.name} cannot pay its troops: ${deserted} units desert.`)
   }
 
@@ -59,6 +68,34 @@ function processEconomy(state: GameState, n: Nation): void {
 
   if (n.wars.length > 0) n.warWeariness = Math.min(100, n.warWeariness + 1.5 * n.wars.length * (n.policies.military === 'expansionist' ? 1.5 : 1))
   else n.warWeariness = Math.max(0, n.warWeariness - 3)
+}
+
+/** Provinces raise local levies up to a small floor, so no land is ever wholly undefended. */
+function levyMilitia(state: GameState, n: Nation): void {
+  for (const p of ownedProvinces(state, n.id)) {
+    if (p.unrest >= 70) continue
+    const target = Math.min(3, Math.floor(p.population / 4000))
+    if (armySize(p.garrison) < target) p.garrison.militia += 1
+  }
+}
+
+/** Fortresses whose siege has run its course fall to the besieger, walls and all. */
+function resolveSieges(state: GameState): void {
+  for (const fall of advanceSieges(state)) {
+    const name = state.provinces[fall.provinceId].name
+    log(state, 'war', `The walls of ${name} are broken after a long siege.`)
+    performArmyAttack(state, fall.armyId, fall.provinceId, true)
+  }
+}
+
+/** Overcrowded provinces starve the troops quartered in them. */
+function reportAttrition(state: GameState): void {
+  for (const loss of applyAttrition(state, () => nextRand(state))) {
+    const army = state.armies.find((a) => a.id === loss.armyId)
+    if (army && state.nations[army.ownerId].isPlayer) {
+      log(state, 'war', `${army.name} loses ${loss.lost} unit${loss.lost === 1 ? '' : 's'} to hunger and disease around ${loss.provinceName}.`)
+    }
+  }
 }
 
 function processRebellions(state: GameState): void {
@@ -123,11 +160,15 @@ export function endTurn(prev: GameState): GameState {
   if (state.gameOver || state.pendingEvent) return state
   state.lastTurnBattles = []
 
-  for (const n of state.nations) if (n.alive) processEconomy(state, n)
+  refreshMovement(state)
+  for (const n of state.nations) if (n.alive) { processEconomy(state, n); levyMilitia(state, n) }
   for (const p of state.provinces) if (p.ownerId === null) growTribal(p)
   for (const n of state.nations) if (n.alive && !n.isPlayer) runAI(state, n)
   processRebellions(state)
+  resolveSieges(state)
+  reportAttrition(state)
   driftRelations(state)
+  pruneArmies(state)
   for (const n of state.nations) checkElimination(state, n.id)
 
   checkObjectives(state)

@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Army, BuildingKey, GameState, Province, UnitKey } from '../engine/types'
 import type { Action } from '../engine/actions'
-import { attackTargets, canTransfer } from '../engine/actions'
+import { armiesAt, describeFieldArmy, supplyLimit, unitsQuartered } from '../engine/armies'
+
 import { BUILDINGS, BUILDING_ORDER, RESOURCES, TERRAINS, UNITS, UNIT_ORDER } from '../engine/data'
-import { armySize, describeArmy, emptyArmy, fmt, hexDistance, ownedProvinces, ownerName, playerNation } from '../engine/helpers'
+import { armySize, describeArmy, emptyArmy, fmt, ownerName, playerNation } from '../engine/helpers'
 import { buildingCost, canBuild, canRecruit, provinceOutput, unitCost } from '../engine/economy'
 import { provinceCapacity } from '../engine/population'
-import { attackPower, defensePower } from '../engine/military'
+
 import { atWar } from '../engine/diplomacy'
 import { ArmyPicker, Bar, unrestColor } from './common'
 import { YieldsPanel } from './YieldsPanel'
-import { scrollPanelTo } from '../App'
 import { buildingGain, describeGain } from '../engine/yields'
 
 interface Props {
@@ -18,11 +18,11 @@ interface Props {
   province: Province | null
   dispatch: (a: Action) => void
   onSelect: (id: number) => void
-  transferTarget: number | null
-  setTransferTarget: (id: number | null) => void
   onFocus?: (id: number) => void
   attackPreset?: number | null
   onDiplomacy?: () => void
+  selectedArmy?: number | null
+  onSelectArmy?: (id: number) => void
 }
 
 function costText(c: { gold: number; wood: number; iron: number }) {
@@ -33,35 +33,15 @@ function costText(c: { gold: number; wood: number; iron: number }) {
   return parts.join(' ')
 }
 
-export function ProvincePanel({ state, province: p, dispatch, onSelect, transferTarget, setTransferTarget, onFocus, attackPreset = null, onDiplomacy }: Props) {
+export function ProvincePanel({ state, province: p, dispatch, onSelect, onFocus, onDiplomacy, selectedArmy = null, onSelectArmy }: Props) {
   const player = playerNation(state)
   const [unit, setUnit] = useState<UnitKey>('infantry')
   const [count, setCount] = useState(1)
-  const [attackTo, setAttackTo] = useState<number | null>(null)
-  const [attackArmy, setAttackArmy] = useState<Army>(emptyArmy())
-  const [moveArmy, setMoveArmy] = useState<Army>(emptyArmy())
-
-  const targets = useMemo(() => (p ? attackTargets(state, p.id) : []), [state, p])
+  const [raiseUnits, setRaiseUnits] = useState<Army>(emptyArmy())
 
   useEffect(() => {
-    if (!p) return
-    setAttackArmy({ ...p.garrison, militia: 0 })
-    setMoveArmy(emptyArmy())
-    setAttackTo(targets[0] ?? null)
-    setTransferTarget(null)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    setRaiseUnits(emptyArmy())
   }, [p?.id, state.turn])
-
-  useEffect(() => {
-    if (attackTo !== null && !targets.includes(attackTo)) setAttackTo(targets[0] ?? null)
-  }, [targets, attackTo])
-
-  useEffect(() => {
-    if (attackPreset !== null && targets.includes(attackPreset)) {
-      setAttackTo(attackPreset)
-      setTimeout(() => scrollPanelTo('sec-attack'), 60)
-    }
-  }, [attackPreset, targets])
 
   if (!p) return <p className="muted">Select a province on the map.</p>
 
@@ -70,18 +50,8 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
   const out = provinceOutput(state, p)
   const cap = provinceCapacity(p, owner)
   const t = TERRAINS[p.terrain]
-  const locked = p.lockedTurn === state.turn
   const neighbours = p.neighbors.map((i) => state.provinces[i])
-  const myProvinces = ownedProvinces(state, player.id).filter((q) => q.id !== p.id)
-
-  const target = attackTo !== null ? state.provinces[attackTo] : null
-  const targetOwner = target && target.ownerId !== null ? state.nations[target.ownerId] : null
-  const myPower = target ? attackPower(attackArmy, player, target.terrain, 2, state) : 0
-  const theirPower = target ? defensePower(target.garrison, targetOwner, target, attackArmy.siege) : 0
-  const ratio = theirPower > 0 ? myPower / theirPower : 99
-  const odds = ratio >= 1.8 ? ['Overwhelming', 'ok'] : ratio >= 1.25 ? ['Favourable', 'ok'] : ratio >= 0.9 ? ['Even', 'warn'] : ['Poor', 'bad']
-
-  const transfer = transferTarget !== null ? canTransfer(state, p.id, transferTarget, moveArmy) : null
+  const stationed = mine ? armiesAt(state, p.id).filter((a) => a.ownerId === player.id) : []
 
   return (
     <div>
@@ -111,13 +81,14 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
           {p.devastation > 0.01 && <><dt>Devastation</dt><dd className="bad">{Math.round(p.devastation * 100)}%</dd></>}
           <dt>Food balance</dt><dd className={out.food - p.population / 1000 >= 0 ? 'ok' : 'bad'}>{(out.food - p.population / 1000 >= 0 ? '+' : '') + (out.food - p.population / 1000).toFixed(1)} <span className="muted">(makes {out.food.toFixed(1)}, eats {(p.population / 1000).toFixed(1)})</span></dd>
           <dt>Terrain</dt><dd>defence ×{t.defense} · cavalry ×{t.cavalry}</dd>
+          {mine && <><dt title="Units this province can feed before armies quartered here start to starve">Supply</dt><dd className={unitsQuartered(state, p.id, player.id) > supplyLimit(p) ? 'bad' : ''}>{unitsQuartered(state, p.id, player.id)} / {supplyLimit(p)}</dd></>}
           {p.resource && <><dt>Resource</dt><dd title={RESOURCES[p.resource].description}><span style={{ color: RESOURCES[p.resource].color }}>{RESOURCES[p.resource].glyph}</span> {RESOURCES[p.resource].name}</dd></>}
         </dl>
         {p.resource && <div className="muted small" style={{ marginTop: 6 }}>{RESOURCES[p.resource].description}</div>}
         <div style={{ marginTop: 6 }}><Bar value={p.unrest} color={unrestColor(p.unrest)} /></div>
       </div>
 
-      <h3>Garrison {locked && <span className="muted small">(has acted this turn)</span>}</h3>
+      <h3>Garrison <span className="muted small">(defends this province)</span></h3>
       <p>{describeArmy(p.garrison)} <span className="muted">· {armySize(p.garrison)} units</span></p>
       {mine && UNIT_ORDER.some((k) => p.garrison[k] > 0) && (
         <div className="row">
@@ -178,56 +149,34 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, transfer
             {UNITS[unit].requiresBarracks && p.buildings.barracks < 1 && <span className="warn"> Needs a barracks here.</span>}
           </p>
 
-          <h3 id="sec-attack">Attack</h3>
-          {targets.length === 0 ? (
-            <p className="muted small">{locked ? 'This garrison has already acted this turn.' : armySize(p.garrison) === 0 ? 'No troops here.' : 'No adjacent enemy or independent province. Declare war in Diplomacy to open new fronts.'}</p>
+          <h3 id="sec-armies">Armies</h3>
+          {stationed.length === 0 ? (
+            <p className="muted small">No field army stands here. Raise one below to march on your neighbours.</p>
           ) : (
             <div className="stack">
-              <div className="row">
-                <select value={attackTo ?? ''} onChange={(e) => setAttackTo(parseInt(e.target.value, 10))}>
-                  {targets.map((i) => {
-                    const q = state.provinces[i]
-                    return <option key={i} value={i}>{q.name} — {ownerName(state, q.ownerId)} ({armySize(q.garrison)} units{q.buildings.walls ? `, walls ${q.buildings.walls}` : ''})</option>
-                  })}
-                </select>
-                <button className="btn small" onClick={() => attackTo !== null && onSelect(attackTo)}>View</button>
-              </div>
-              <ArmyPicker max={p.garrison} value={attackArmy} onChange={setAttackArmy} />
-              {target && (
-                <div className="card">
-                  <div className="row between">
-                    <span>Our strength <b>{Math.round(myPower)}</b> vs their defence <b>{Math.round(theirPower)}</b></span>
-                    <span className={odds[1]}><b>{odds[0]}</b></span>
-                  </div>
-                  <div className="muted small">
-                    {TERRAINS[target.terrain].name}: defence ×{TERRAINS[target.terrain].defense}, cavalry ×{TERRAINS[target.terrain].cavalry}.
-                    {target.buildings.walls > 0 && ` Walls level ${target.buildings.walls}${attackArmy.siege ? ` (${attackArmy.siege} siege engines breach ${Math.min(target.buildings.walls, attackArmy.siege * 0.5)} levels)` : ''}.`}
-                    {' '}Defenders: {describeArmy(target.garrison)}.
-                  </div>
-                </div>
-              )}
-              <button className="btn danger" disabled={armySize(attackArmy) === 0 || attackTo === null || !!state.pendingEvent} onClick={() => attackTo !== null && dispatch({ type: 'ATTACK', from: p.id, to: attackTo, army: attackArmy })}>
-                Attack with {armySize(attackArmy)} units
-              </button>
+              {stationed.map((a) => (
+                <button key={a.id} className={'army-row' + (selectedArmy === a.id ? ' active' : '')} onClick={() => onSelectArmy?.(a.id)}>
+                  <span className="swatch" style={{ background: player.color }} />
+                  <span className="army-row-main">
+                    <b>{a.name}</b>
+                    <span className="muted small">{describeFieldArmy(a)}</span>
+                  </span>
+                  <span className={'army-move ' + (a.movement > 0 ? 'ok' : 'muted')}>{a.movement}/{a.maxMovement}</span>
+                </button>
+              ))}
             </div>
           )}
 
-          <h3 id="sec-move">Move troops</h3>
-          {myProvinces.length === 0 ? <p className="muted small">You have no other province.</p> : locked ? <p className="muted small">This garrison has already acted this turn.</p> : (
+          <h3 id="sec-raise">Raise an army</h3>
+          {armySize(p.garrison) === 0 ? (
+            <p className="muted small">No troops in this garrison. Recruit some first.</p>
+          ) : (
             <div className="stack">
-              <select value={transferTarget ?? ''} onChange={(e) => setTransferTarget(e.target.value === '' ? null : parseInt(e.target.value, 10))}>
-                <option value="">Choose destination…</option>
-                {myProvinces.slice().sort((a, b) => hexDistance(p, a) - hexDistance(p, b)).map((q) => (
-                  <option key={q.id} value={q.id}>{q.name} — {hexDistance(p, q)} hex{hexDistance(p, q) === 1 ? '' : 'es'} · {armySize(q.garrison)} units</option>
-                ))}
-              </select>
-              <ArmyPicker max={p.garrison} value={moveArmy} onChange={setMoveArmy} />
-              <div className="row">
-                <button className="btn" disabled={!transfer || !transfer.ok} title={transfer?.reason ?? 'Choose a destination'} onClick={() => transferTarget !== null && dispatch({ type: 'TRANSFER', from: p.id, to: transferTarget, army: moveArmy })}>
-                  Move {armySize(moveArmy)} units{transfer ? ` (${transfer.cost} gold)` : ''}
-                </button>
-                {transfer && !transfer.ok && <span className="muted small">{transfer.reason}</span>}
-              </div>
+              <p className="muted small">Garrisons defend where they stand. Only field armies can march and attack.</p>
+              <ArmyPicker max={p.garrison} value={raiseUnits} onChange={setRaiseUnits} />
+              <button className="btn primary" disabled={armySize(raiseUnits) === 0} onClick={() => { dispatch({ type: 'RAISE_ARMY', provinceId: p.id, units: raiseUnits }); setRaiseUnits(emptyArmy()) }}>
+                Raise army of {armySize(raiseUnits)} units
+              </button>
             </div>
           )}
         </>

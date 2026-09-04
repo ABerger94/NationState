@@ -73,7 +73,7 @@ export function createGame(opts: { seed: number; playerName: string; difficulty:
   const seed = opts.seed | 0 || 1
   const state: GameState = {
     version: 1, seed, rng: seed, turn: 1, startYear: START_YEAR, difficulty: opts.difficulty,
-    cols: COLS, rows: ROWS, provinces: [], nations: [], log: [], battles: [], nextId: 1,
+    cols: COLS, rows: ROWS, provinces: [], nations: [], armies: [], log: [], battles: [], nextId: 1,
     pendingEvent: null, lastTurnBattles: [], winner: null, gameOver: false, gameOverReason: null, objectives: [],
   }
   const used = new Set<string>()

@@ -103,6 +103,13 @@ export function nationBudget(state: GameState, n: Nation): Budget {
     buildingGold += levels * 0.5
     granaries += p.buildings.granary
   }
+  for (const a of state.armies) {
+    if (a.ownerId !== n.id) continue
+    for (const k of UNIT_ORDER) {
+      unitGold += a.units[k] * UNITS[k].upkeepGold * logisticsMult
+      unitFood += a.units[k] * UNITS[k].upkeepFood
+    }
+  }
   if (n.policies.society === 'scholarly') science = Math.round(science * 1.3)
   else if (n.policies.society === 'tolerant') science = Math.round(science * 0.85)
   if (!n.isPlayer) income.gold *= DIFFICULTIES[state.difficulty].aiIncome
