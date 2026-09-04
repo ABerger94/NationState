@@ -72,8 +72,8 @@ describe('reducer', () => {
     const s = newGame()
     const player = playerNation(s)
     const cap = s.provinces[player.capitalId]
-    cap.garrison.infantry = 30
-    const raised = reducer(s, { type: 'RAISE_ARMY', provinceId: cap.id, units: { ...emptyArmy(), infantry: 30 } }) as GameState
+    cap.garrison.infantry = 20
+    const raised = reducer(s, { type: 'RAISE_ARMY', provinceId: cap.id, units: { ...emptyArmy(), infantry: 20 } }) as GameState
     expect(raised.armies).toHaveLength(1)
     expect(raised.provinces[cap.id].garrison.infantry).toBe(0)
     const army = raised.armies[0]
@@ -122,6 +122,11 @@ describe('simulation', () => {
         expect(s.nations[a.ownerId].alive).toBe(true)
         expect(a.movement).toBeGreaterThanOrEqual(0)
         expect(a.movement).toBeLessThanOrEqual(a.maxMovement)
+        if (a.siege) {
+          expect(s.provinces[a.provinceId].neighbors).toContain(a.siege.provinceId)
+          expect(s.provinces[a.siege.provinceId].ownerId).not.toBe(a.ownerId)
+          expect(a.siege.progress).toBeGreaterThanOrEqual(0)
+        }
       }
     }
     const owned = s.provinces.filter((p) => p.ownerId !== null).length
@@ -230,6 +235,85 @@ describe('armies', () => {
     const after = nationBudget(g, playerNation(g)).unitGold
     expect(after).toBeGreaterThan(before)
     expect(armySize(nationArmy(g, 0))).toBe(strengthBefore + 10)
+  })
+})
+
+describe('sieges, supply and retreat', () => {
+  it('a siege grinds walls down over turns and then takes the province', async () => {
+    const { siegeRequired, wallsBreached } = await import('./armies')
+    const s = newGame()
+    const player = playerNation(s)
+    const cap = s.provinces[player.capitalId]
+    const target = s.provinces[cap.neighbors.find((i) => s.provinces[i].ownerId === null)!]
+    target.buildings.walls = 2
+    target.garrison = { ...emptyArmy(), infantry: 6 }
+    cap.garrison.infantry = 12
+    let g = reducer(s, { type: 'RAISE_ARMY', provinceId: cap.id, units: { ...emptyArmy(), infantry: 12 } }) as GameState
+    const id = g.armies[0].id
+    g = reducer(g, { type: 'BESIEGE', armyId: id, toId: target.id }) as GameState
+    const army = g.armies.find((a) => a.id === id)!
+    expect(army.siege).toEqual({ provinceId: target.id, progress: 0 })
+    expect(army.movement).toBe(0)
+    const required = siegeRequired(g.provinces[target.id], army.units)
+    expect(required).toBe(4)
+    for (let i = 0; i < required; i++) {
+      if (g.pendingEvent) g = reducer(g, { type: 'RESOLVE_EVENT', choice: 0 }) as GameState
+      g = endTurn(g)
+      if (g.provinces[target.id].ownerId === 0) break
+    }
+    expect(g.provinces[target.id].ownerId).toBe(0)
+    expect(g.log.some((e) => e.text.includes('lays siege'))).toBe(true)
+    void wallsBreached
+  })
+  it('breached walls weaken the defence', async () => {
+    const { defensePower } = await import('./military')
+    const s = newGame()
+    const p = s.provinces.find((q) => q.ownerId === null)!
+    p.buildings.walls = 3
+    const def = { ...emptyArmy(), infantry: 6 }
+    const whole = defensePower(def, null, p, 0, 0)
+    const breached = defensePower(def, null, p, 0, 3)
+    expect(breached).toBeLessThan(whole)
+  })
+  it('marching away abandons the siege', async () => {
+    const s = newGame()
+    const player = playerNation(s)
+    const cap = s.provinces[player.capitalId]
+    const target = s.provinces[cap.neighbors.find((i) => s.provinces[i].ownerId === null)!]
+    target.buildings.walls = 2
+    cap.garrison.infantry = 8
+    let g = reducer(s, { type: 'RAISE_ARMY', provinceId: cap.id, units: { ...emptyArmy(), infantry: 8 } }) as GameState
+    const id = g.armies[0].id
+    g = reducer(g, { type: 'BESIEGE', armyId: id, toId: target.id }) as GameState
+    expect(g.armies[0].siege).not.toBeNull()
+    g = endTurn(g)
+    const dest = ownedProvinces(g, 0).find((q) => q.id !== g.armies[0].provinceId && g.provinces[g.armies[0].provinceId].neighbors.includes(q.id))
+    if (dest) {
+      g = reducer(g, { type: 'MOVE_ARMY', armyId: id, destId: dest.id }) as GameState
+      expect(g.armies[0].siege).toBeNull()
+    }
+  })
+  it('overcrowded provinces starve the troops quartered there', async () => {
+    const { applyAttrition, supplyLimit } = await import('./armies')
+    const s = newGame()
+    const player = playerNation(s)
+    const cap = s.provinces[player.capitalId]
+    const limit = supplyLimit(cap)
+    cap.garrison = { ...emptyArmy(), infantry: limit + 20 }
+    const g = reducer(s, { type: 'RAISE_ARMY', provinceId: cap.id, units: { ...emptyArmy(), infantry: limit + 20 } }) as GameState
+    const before = armySize(g.armies[0].units)
+    const losses = applyAttrition(g, () => 0.5)
+    expect(losses.length).toBeGreaterThan(0)
+    expect(armySize(g.armies[0].units)).toBeLessThan(before)
+  })
+  it('no army may exceed the size cap', async () => {
+    const { MAX_ARMY_UNITS } = await import('./data')
+    const s = newGame()
+    const player = playerNation(s)
+    const cap = s.provinces[player.capitalId]
+    cap.garrison = { ...emptyArmy(), infantry: MAX_ARMY_UNITS + 30 }
+    const g = reducer(s, { type: 'RAISE_ARMY', provinceId: cap.id, units: { ...emptyArmy(), infantry: MAX_ARMY_UNITS + 30 } }) as GameState
+    expect(armySize(g.armies[0].units)).toBe(MAX_ARMY_UNITS)
   })
 })
 

@@ -14,6 +14,7 @@ interface TileProps {
   target: boolean
   highlight: boolean
   armed?: boolean
+  besieged?: boolean
   modeColor?: string | null
   interactive: boolean
   onSelect: (id: number) => void
@@ -36,7 +37,7 @@ function Ring({ y, color, speed = 3, wide = false }: { y: number; color: string;
   )
 }
 
-export function Tile({ p, state, height, selected, hovered, target, highlight, armed = false, modeColor = null, interactive, onSelect, onHover }: TileProps) {
+export function Tile({ p, state, height, selected, hovered, target, highlight, armed = false, besieged = false, modeColor = null, interactive, onSelect, onHover }: TileProps) {
   const [x, z] = tilePosition(p.col, p.row)
   const owner = p.ownerId === null ? null : state.nations[p.ownerId]
   const ownerColor = owner?.color ?? null
@@ -80,6 +81,7 @@ export function Tile({ p, state, height, selected, hovered, target, highlight, a
       </mesh>
       {selected && <Ring y={height + 0.03} color="#ffffff" />}
       {armed && <Ring y={height + 0.04} color="#ff2d2d" speed={9} wide />}
+      {besieged && !armed && <Ring y={height + 0.035} color="#f5a524" speed={2} wide />}
       {target && !selected && !armed && <Ring y={height + 0.03} color="#ff4d4d" speed={5} />}
       {highlight && !selected && <Ring y={height + 0.03} color="#5ad1ff" speed={4} />}
     </group>

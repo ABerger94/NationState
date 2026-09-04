@@ -16,6 +16,7 @@ export function migrate(raw: GameState): GameState {
   const s = raw
   s.objectives ??= []
   s.armies ??= []
+  for (const a of s.armies) a.siege ??= null
   for (const n of s.nations) {
     n.policies ??= defaultPolicies()
     n.stats ??= emptyStats()

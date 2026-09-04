@@ -377,6 +377,7 @@ export default function App() {
         <ArmyBar
           state={state} armyId={army.id} attackTarget={attackTarget} dispatch={act}
           onAttack={startArmyAttack}
+          onBesiege={(id, toId) => { audio.play('build'); dispatch({ type: 'BESIEGE', armyId: id, toId }); setAttackTarget(null) }}
           onCancelAttack={() => setAttackTarget(null)}
           onDeselect={() => { setSelectedArmy(null); setAttackTarget(null) }}
           onFocus={focusOn}

@@ -4,8 +4,8 @@ import { armySize, cloneState, log, ownedProvinces, playerNation } from './helpe
 import { nationBudget, nationScore } from './economy'
 import { growProvince, growTribal, updateUnrest } from './population'
 import { runAI } from './ai'
-import { resolveRebellion, checkElimination } from './military'
-import { pruneArmies, refreshMovement } from './armies'
+import { resolveRebellion, checkElimination, performArmyAttack } from './military'
+import { advanceSieges, applyAttrition, pruneArmies, refreshMovement } from './armies'
 import { rollEvent } from './events'
 import { checkObjectives } from './objectives'
 import { nextRand } from './rng'
@@ -79,6 +79,25 @@ function levyMilitia(state: GameState, n: Nation): void {
   }
 }
 
+/** Fortresses whose siege has run its course fall to the besieger, walls and all. */
+function resolveSieges(state: GameState): void {
+  for (const fall of advanceSieges(state)) {
+    const name = state.provinces[fall.provinceId].name
+    log(state, 'war', `The walls of ${name} are broken after a long siege.`)
+    performArmyAttack(state, fall.armyId, fall.provinceId, true)
+  }
+}
+
+/** Overcrowded provinces starve the troops quartered in them. */
+function reportAttrition(state: GameState): void {
+  for (const loss of applyAttrition(state, () => nextRand(state))) {
+    const army = state.armies.find((a) => a.id === loss.armyId)
+    if (army && state.nations[army.ownerId].isPlayer) {
+      log(state, 'war', `${army.name} loses ${loss.lost} unit${loss.lost === 1 ? '' : 's'} to hunger and disease around ${loss.provinceName}.`)
+    }
+  }
+}
+
 function processRebellions(state: GameState): void {
   for (const p of state.provinces) {
     if (p.ownerId === null || p.unrest < 85) continue
@@ -146,6 +165,8 @@ export function endTurn(prev: GameState): GameState {
   for (const p of state.provinces) if (p.ownerId === null) growTribal(p)
   for (const n of state.nations) if (n.alive && !n.isPlayer) runAI(state, n)
   processRebellions(state)
+  resolveSieges(state)
+  reportAttrition(state)
   driftRelations(state)
   pruneArmies(state)
   for (const n of state.nations) checkElimination(state, n.id)

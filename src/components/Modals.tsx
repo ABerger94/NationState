@@ -190,6 +190,8 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
           <p>Taxes come from population, markets and the tax rate. Higher taxes raise unrest; unrest, war weariness and heavy taxes lower stability; stability scales income, growth and morale. Temples, luxuries and the Tolerance edict calm the realm.</p>
           <h3>Garrisons and armies</h3>
           <p>Troops you recruit join a province's <b>garrison</b>, which defends that province and never leaves it. To attack you must <b>raise an army</b> from a garrison. Field armies march across the map on movement points, spending more in forest, hills and mountains, and they can only pass through your own and allied land. Merge them, split them, or stand them down back into a garrison.</p>
+          <h3>Sieges and supply</h3>
+          <p>Walls make storming a province brutally expensive. Instead, park an army beside it and <b>lay siege</b>: every turn grinds the walls down, and when the siege runs its course the fortress falls. Marching away abandons the siege. Each province can only feed so many troops, shown as its <b>supply</b>; stack more than that and they starve a few at a time, so spread your armies out. No army may exceed 24 units.</p>
           <h3>Battle</h3>
           <p>Militia are cheap defenders. Infantry hold lines. Archers volley first and love forests. Cavalry dominate plains and fail in hills. Siege engines breach walls. Battles run in rounds; a side routs when morale drops below 30. Defenders fight as the garrison plus every friendly army standing there. Read the odds before you attack.</p>
           <h3>War and peace</h3>

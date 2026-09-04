@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Army, BuildingKey, GameState, Province, UnitKey } from '../engine/types'
 import type { Action } from '../engine/actions'
-import { armiesAt, describeFieldArmy } from '../engine/armies'
+import { armiesAt, describeFieldArmy, supplyLimit, unitsQuartered } from '../engine/armies'
 
 import { BUILDINGS, BUILDING_ORDER, RESOURCES, TERRAINS, UNITS, UNIT_ORDER } from '../engine/data'
 import { armySize, describeArmy, emptyArmy, fmt, ownerName, playerNation } from '../engine/helpers'
@@ -81,6 +81,7 @@ export function ProvincePanel({ state, province: p, dispatch, onSelect, onFocus,
           {p.devastation > 0.01 && <><dt>Devastation</dt><dd className="bad">{Math.round(p.devastation * 100)}%</dd></>}
           <dt>Food balance</dt><dd className={out.food - p.population / 1000 >= 0 ? 'ok' : 'bad'}>{(out.food - p.population / 1000 >= 0 ? '+' : '') + (out.food - p.population / 1000).toFixed(1)} <span className="muted">(makes {out.food.toFixed(1)}, eats {(p.population / 1000).toFixed(1)})</span></dd>
           <dt>Terrain</dt><dd>defence ×{t.defense} · cavalry ×{t.cavalry}</dd>
+          {mine && <><dt title="Units this province can feed before armies quartered here start to starve">Supply</dt><dd className={unitsQuartered(state, p.id, player.id) > supplyLimit(p) ? 'bad' : ''}>{unitsQuartered(state, p.id, player.id)} / {supplyLimit(p)}</dd></>}
           {p.resource && <><dt>Resource</dt><dd title={RESOURCES[p.resource].description}><span style={{ color: RESOURCES[p.resource].color }}>{RESOURCES[p.resource].glyph}</span> {RESOURCES[p.resource].name}</dd></>}
         </dl>
         {p.resource && <div className="muted small" style={{ marginTop: 6 }}>{RESOURCES[p.resource].description}</div>}

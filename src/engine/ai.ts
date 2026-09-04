@@ -1,10 +1,11 @@
 import type { BuildingKey, GameState, Nation, Province, TechKey, UnitKey } from './types'
 import { BUILDINGS, PERSONALITIES, TECHS, TECH_ORDER, UNITS } from './data'
 import { armyPower, armySize, bordersNation, emptyArmy, hasTech, hexDistance, log, nationArmy, ownedProvinces, totalPopulation } from './helpers'
-import { armiesOf, defendersAt, disbandIntoGarrison, moveArmy, raiseArmy, reachable } from './armies'
+import { armiesOf, canBesiege, defendersAt, disbandIntoGarrison, moveArmy, raiseArmy, reachable, siegeRequired, startSiege, supplyLimit, unitsQuartered, wallsBreached } from './armies'
 import { buildingCost, canAfford, nationBudget, pay, unitCost } from './economy'
 import { aiAcceptsAlliance, aiAcceptsPeace, atWar, declareWar, formAlliance, makePeace } from './diplomacy'
 import { attackPower, canArmyAttack, defensePower, performArmyAttack } from './military'
+import type { FieldArmy } from './types'
 import { nextRand, pick } from './rng'
 
 export function availableTechs(n: Nation): TechKey[] {
@@ -176,22 +177,37 @@ function targetProvinces(state: GameState, n: Nation): Province[] {
   })
 }
 
-/** How badly this nation wants a province, weighing its defence against its worth. */
-function targetScore(state: GameState, n: Nation, p: Province, force: ReturnType<typeof emptyArmy>): number {
+function assaultRatio(state: GameState, n: Nation, p: Province, force: ReturnType<typeof emptyArmy>, breached: number): number {
   const owner = p.ownerId === null ? null : state.nations[p.ownerId]
   const mine = attackPower(force, n, p.terrain, 2, state)
-  const theirs = defensePower(defendersAt(state, p.id).units, owner, p, force.siege)
-  const ratio = theirs <= 0 ? 99 : mine / theirs
+  const theirs = defensePower(defendersAt(state, p.id).units, owner, p, force.siege, breached)
+  return theirs <= 0 ? 99 : mine / theirs
+}
+
+function provinceWorth(p: Province): number {
+  return p.population / 4000 + (p.resource ? 2 : 0) + (p.isCapital ? 4 : 0) + (p.ownerId === null ? 1 : 2)
+}
+
+/** How badly this nation wants a province, weighing its defence against its worth. */
+function targetScore(state: GameState, n: Nation, p: Province, force: ReturnType<typeof emptyArmy>, breached = 0): number {
+  const ratio = assaultRatio(state, n, p, force, breached)
   if (ratio < 1.25) return -1
-  const worth = p.population / 4000 + (p.resource ? 2 : 0) + (p.isCapital ? 4 : 0) + (p.ownerId === null ? 1 : 2)
-  return worth + Math.min(6, ratio)
+  return provinceWorth(p) + Math.min(6, ratio)
+}
+
+/** Would this army rather sit down and starve a fortress out than storm it? */
+function prefersSiege(state: GameState, n: Nation, army: FieldArmy, p: Province): boolean {
+  if (p.buildings.walls <= 0) return false
+  if (!canBesiege(state, army, p.id).ok) return false
+  if (assaultRatio(state, n, p, army.units, wallsBreached(army, p)) >= 2.2) return false
+  return siegeRequired(p, army.units) <= 8
 }
 
 function aiRaiseArmies(state: GameState, n: Nation) {
   const pers = PERSONALITIES[n.personality]
   const wantOffence = n.wars.length > 0 || state.provinces.some((p) => p.ownerId === null && p.neighbors.some((i) => state.provinces[i].ownerId === n.id))
   if (!wantOffence) return
-  const maxArmies = n.personality === 'aggressive' ? 4 : 3
+  const maxArmies = (n.personality === 'aggressive' ? 4 : 3) + Math.floor(ownedProvinces(state, n.id).length / 5)
   for (const p of ownedProvinces(state, n.id)) {
     if (armiesOf(state, n.id).length >= maxArmies) break
     const guard = homeGuard(state, n, p)
@@ -210,6 +226,17 @@ function aiRaiseArmies(state: GameState, n: Nation) {
 function aiCommandArmies(state: GameState, n: Nation) {
   const pers = PERSONALITIES[n.personality]
   for (const army of armiesOf(state, n.id)) {
+    // A siege already under way is worth finishing: storm it the moment the breach is wide enough.
+    if (army.siege) {
+      const besieged = state.provinces[army.siege.provinceId]
+      const breach = wallsBreached(army, besieged)
+      if (canArmyAttack(state, army, besieged.id).ok && assaultRatio(state, n, besieged, army.units, breach) >= 2.2) {
+        performArmyAttack(state, army.id, besieged.id)
+      } else {
+        army.movement = 0
+      }
+      continue
+    }
     const targets = targetProvinces(state, n)
     if (!targets.length) {
       if (n.wars.length === 0 && state.provinces[army.provinceId].ownerId === n.id) disbandIntoGarrison(state, army.id)
@@ -225,7 +252,17 @@ function aiCommandArmies(state: GameState, n: Nation) {
       if (score > 0 && (!best || score > best.score)) best = { p, score }
     }
     if (best && nextRand(state) < 0.5 + pers.aggression * 0.5) {
-      performArmyAttack(state, army.id, best.p.id)
+      if (prefersSiege(state, n, army, best.p)) startSiege(state, army.id, best.p.id)
+      else performArmyAttack(state, army.id, best.p.id)
+      continue
+    }
+    // Walls we cannot storm are worth investing instead.
+    const wallsNearby = state.provinces[army.provinceId].neighbors
+      .map((i) => state.provinces[i])
+      .filter((p) => targets.includes(p) && prefersSiege(state, n, army, p))
+      .sort((x, y) => provinceWorth(y) - provinceWorth(x))[0]
+    if (wallsNearby) {
+      startSiege(state, army.id, wallsNearby.id)
       continue
     }
     // Otherwise march toward the most attractive target we can still reach.
@@ -237,6 +274,8 @@ function aiCommandArmies(state: GameState, n: Nation) {
     let step: { id: number; dist: number } | null = null
     const here = hexDistance(state.provinces[army.provinceId], goal.p)
     for (const id of options.keys()) {
+      // Do not march into a province that cannot feed the troops already there.
+      if (unitsQuartered(state, id, n.id) + armySize(army.units) > supplyLimit(state.provinces[id])) continue
       const dist = hexDistance(state.provinces[id], goal.p)
       if (dist < here && (!step || dist < step.dist)) step = { id, dist }
     }

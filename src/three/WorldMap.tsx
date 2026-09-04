@@ -198,6 +198,7 @@ export function WorldMap({ state, selected, targets, highlight, attackTarget = n
   }), [state.provinces, heights])
   const playerId = state.nations.findIndex((n) => n.isPlayer)
   const modeTiles = useMemo(() => state.provinces.map((p) => mapModeTile(state, p, mapMode)), [state, mapMode])
+  const besieged = useMemo(() => state.armies.filter((a) => a.siege).map((a) => a.siege!.provinceId), [state.armies])
 
   return (
     <div className="scene">
@@ -225,7 +226,7 @@ export function WorldMap({ state, selected, targets, highlight, attackTarget = n
               key={p.id} p={p} state={state} height={heights[p.id]}
               selected={selected === p.id} hovered={hovered === p.id}
               target={targets.includes(p.id)} highlight={highlight.includes(p.id)} armed={attackTarget === p.id}
-              modeColor={modeTiles[p.id]?.color ?? null}
+              modeColor={modeTiles[p.id]?.color ?? null} besieged={besieged.includes(p.id)}
               interactive={interactive} onSelect={onSelect} onHover={setHovered}
             />
           ))}

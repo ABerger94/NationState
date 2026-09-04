@@ -1,7 +1,7 @@
 import type { GameState } from '../engine/types'
 import { TERRAINS } from '../engine/data'
 import { armySize, describeArmy, ownerName, playerNation } from '../engine/helpers'
-import { armiesAt, armiesOf } from '../engine/armies'
+import { armiesAt, armiesOf, besiegersOf, canBesiege } from '../engine/armies'
 import { canArmyAttack } from '../engine/military'
 import { atWar } from '../engine/diplomacy'
 import { Locate, Shield, Swords } from './icons'
@@ -58,9 +58,12 @@ export function QuickBar({ state, selected, onSection, onDiplomacy, onFocus, onS
           <>
             {attackers.map((a) => (
               <button key={a.id} className="btn danger" onClick={() => onPlanAttack(a.id, p.id)}>
-                <Swords /> Attack with {a.name}
+                <Swords /> {canBesiege(state, a, p.id).ok ? 'Storm or besiege with' : 'Attack with'} {a.name}
               </button>
             ))}
+            {besiegersOf(state, p.id).length > 0 && (
+              <span className="warn small">Under siege by {besiegersOf(state, p.id).map((a) => a.name).join(', ')}</span>
+            )}
             {owner && <button className="btn" onClick={onDiplomacy}>Diplomacy with {owner.name}</button>}
             {!attackers.length && !owner && <span className="muted small">Independent tribes. March an army next to it to attack.</span>}
             {!attackers.length && owner && !atWar(player, owner) && <span className="muted small">At peace. Declare war before attacking.</span>}

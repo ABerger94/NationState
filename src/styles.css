@@ -352,6 +352,8 @@ button:focus:not(:focus-visible) { outline: none; }
 .army-row-main { display: flex; flex-direction: column; flex: 1; line-height: 1.25; }
 .army-move { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px; }
 
+.siege-strip { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border-radius: 8px; background: rgba(245,165,36,.08); border: 1px solid rgba(245,165,36,.3); }
+
 /* ---------- mobile (must stay last so it wins) ---------- */
 @media (max-width: 900px) {
   /* header: one compact row plus a slim resource strip */

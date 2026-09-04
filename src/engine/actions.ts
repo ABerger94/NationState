@@ -8,7 +8,7 @@ import { canArmyAttack, performArmyAttack } from './military'
 import { applyEventChoice } from './events'
 import { endTurn } from './turn'
 import { createGame } from './world'
-import { armiesOf, armyById, disbandIntoGarrison, mergeArmies, moveArmy, raiseArmy, splitArmy } from './armies'
+import { armiesOf, armyById, canBesiege, disbandIntoGarrison, mergeArmies, moveArmy, raiseArmy, splitArmy, startSiege } from './armies'
 
 export type Action =
   | { type: 'NEW_GAME'; seed: number; playerName: string; difficulty: Difficulty }
@@ -19,6 +19,7 @@ export type Action =
   | { type: 'RAISE_ARMY'; provinceId: number; units: Army }
   | { type: 'MOVE_ARMY'; armyId: number; destId: number }
   | { type: 'ARMY_ATTACK'; armyId: number; toId: number }
+  | { type: 'BESIEGE'; armyId: number; toId: number }
   | { type: 'DISBAND_ARMY'; armyId: number }
   | { type: 'MERGE_ARMIES'; intoId: number; fromId: number }
   | { type: 'SPLIT_ARMY'; armyId: number; units: Army }
@@ -120,6 +121,13 @@ function applyAction(state: GameState, action: Action): GameState | null {
       if (s.pendingEvent) return state
       s.lastTurnBattles = []
       performArmyAttack(s, action.armyId, action.toId)
+      return s
+    }
+    case 'BESIEGE': {
+      const army = armyById(s, action.armyId)
+      if (!army || army.ownerId !== player.id) return state
+      if (!canBesiege(s, army, action.toId).ok) return state
+      if (!startSiege(s, action.armyId, action.toId)) return state
       return s
     }
     case 'DISBAND_ARMY': {

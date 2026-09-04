@@ -25,6 +25,15 @@ export const ARMY_BASE_MOVEMENT = 4
 export const ARMY_MIN_MOVEMENT = 2
 export const ARMY_MAX_MOVEMENT = 6
 
+/** Turns of siege needed per level of walls before a fortress surrenders. */
+export const SIEGE_TURNS_PER_WALL = 2
+/** Base units a province can feed before armies standing there start to waste away. */
+export const SUPPLY_BASE = 2
+export const SUPPLY_PER_POP = 2000
+export const ATTRITION_RATE = 0.15
+/** No single army may field more than this many units; empires must fight with several. */
+export const MAX_ARMY_UNITS = 24
+
 export interface BuildingDef { name: string; description: string; cost: Resources; max: number }
 export const BUILDINGS: Record<BuildingKey, BuildingDef> = {
   farm: { name: 'Farm', description: '+30% food and +25% population capacity per level.', cost: { gold: 60, food: 0, wood: 20, iron: 0 }, max: 5 },
@@ -33,7 +42,7 @@ export const BUILDINGS: Record<BuildingKey, BuildingDef> = {
   market: { name: 'Market', description: '+25% tax income per level.', cost: { gold: 100, food: 0, wood: 30, iron: 0 }, max: 4 },
   granary: { name: 'Granary', description: '+300 food storage, +30% population capacity, halves famine losses here.', cost: { gold: 70, food: 0, wood: 40, iron: 0 }, max: 2 },
   barracks: { name: 'Barracks', description: 'Required to train professional troops. Garrison fights +8% harder per level.', cost: { gold: 90, food: 0, wood: 30, iron: 10 }, max: 3 },
-  walls: { name: 'Walls', description: '+30% defence per level. Siege engines can breach them.', cost: { gold: 120, food: 0, wood: 40, iron: 20 }, max: 3 },
+  walls: { name: 'Walls', description: '+45% defence per level. Attackers must besiege them or storm at heavy cost.', cost: { gold: 120, food: 0, wood: 40, iron: 20 }, max: 3 },
   university: { name: 'University', description: '+3 science per turn per level.', cost: { gold: 150, food: 0, wood: 50, iron: 0 }, max: 2 },
   temple: { name: 'Temple', description: '-3 unrest per turn per level and steadier stability.', cost: { gold: 80, food: 0, wood: 30, iron: 0 }, max: 2 },
 }
@@ -57,7 +66,7 @@ export const TECHS: Record<TechKey, TechDef> = {
   agriculture: { name: 'Agriculture', cost: 30, description: '+20% food production.', military: false },
   currency: { name: 'Currency', cost: 40, description: '+20% tax income.', military: false },
   ironWorking: { name: 'Iron Working', cost: 50, description: '+15% attack for all units.', military: true },
-  masonry: { name: 'Masonry', cost: 50, description: 'Walls give +45% defence per level instead of +30%.', military: true },
+  masonry: { name: 'Masonry', cost: 50, description: 'Walls give +65% defence per level instead of +45%.', military: true },
   tactics: { name: 'Tactics', cost: 60, description: '+10% defence for all units.', military: true },
   horsemanship: { name: 'Horsemanship', cost: 60, description: '+20% cavalry attack.', requires: 'ironWorking', military: true },
   medicine: { name: 'Medicine', cost: 70, description: '+30% population growth; plagues are half as deadly.', requires: 'agriculture', military: false },

@@ -13,7 +13,7 @@ const STEPS = [
   { glyph: '⬢', title: 'The map', text: 'Your realm is blue with a beacon over the capital. Click any hex to select it. Left-drag pans, right-drag rotates, scroll zooms.' },
   { glyph: '⚑', title: 'Armies', text: 'Recruit troops, then raise an army from the garrison. Click the army to command it, then click a blue tile to march or a red one to attack.' },
   { glyph: '☰', title: 'Panels', text: 'Right side. Province details, your nation\'s treasury, research and edicts, diplomacy, military and the chronicle.' },
-  { glyph: '↵', title: 'End turn', text: 'Top right, or press Enter. The world moves, then you get a short report of what happened to you.' },
+  { glyph: '↵', title: 'End turn', text: 'Top right, or press Enter. Sieges grind on, armies eat, and the world moves. Then you get a short report.' },
 ]
 
 export function Welcome({ onClose }: { onClose: () => void }) {

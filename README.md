@@ -14,7 +14,9 @@ A turn-based nation building strategy game that runs entirely in the browser, re
 
 - **Provinces and population.** Every hex has terrain, people, unrest, devastation and buildings. Population grows when fed and content, and it is both your tax base and your recruiting pool.
 - **Economy.** Four resources (gold, food, wood, iron), nine building types, a tax slider, food storage and famine. Stability is derived from unrest, war weariness and taxation, and it scales income, growth and troop morale.
-- **Garrisons and field armies.** Recruited troops join a province garrison, which defends where it stands. To attack you raise a **field army** that marches across the map on movement points, costing more in forest, hills and mountains. Armies merge, split, stand down into a garrison, and carry their own morale.
+- **Garrisons and field armies.** Recruited troops join a province garrison, which defends where it stands. To attack you raise a **field army** that marches across the map on movement points, costing more in forest, hills and mountains. Armies merge, split, stand down into a garrison, and carry their own morale. No army may exceed 24 units.
+- **Sieges.** Walls make a direct assault ruinous. Invest a fortress instead: each turn of siege breaks down another part of the walls, and when it runs its course the province falls. Marching away lifts the siege.
+- **Supply and attrition.** Every province can feed only so many troops. Overcrowded stacks starve a few units each turn, so armies must spread out rather than roll forward as one blob.
 - **Military.** Five unit types with distinct roles (militia, infantry, archers, cavalry, siege engines). Battles are resolved round by round with terrain, walls, siege engines, barracks, technology and morale all mattering. Defenders fight as the garrison plus every friendly army present. Every battle produces a detailed report.
 - **Wars and diplomacy.** Relations, war declarations, peace treaties, war score, gifts and alliances that drag allies into wars.
 - **Twelve technologies**, with prerequisites, that shape your economy and army.
@@ -56,7 +58,7 @@ src/engine/      pure game logic, no React
   world.ts       seeded map and nation generation
   economy.ts     production, budgets, stability, costs
   population.ts  growth, capacity, unrest
-  armies.ts      field armies: movement, pathfinding, merge and split, supply
+  armies.ts      field armies: movement, pathfinding, merge and split, sieges, supply and attrition
   military.ts    battle resolution, conquest, rebellions
   diplomacy.ts   relations, wars, peace, alliances
   ai.ts          AI nation decision making
