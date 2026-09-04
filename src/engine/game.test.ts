@@ -3,7 +3,7 @@ import { createGame } from './world'
 import { reducer } from './actions'
 import { endTurn } from './turn'
 import { resolveBattle } from './military'
-import { armySize, emptyArmy, ownedProvinces, playerNation } from './helpers'
+import { armySize, emptyArmy, nationArmy, ownedProvinces, playerNation } from './helpers'
 import { nationBudget, buildingCost } from './economy'
 import type { GameState } from './types'
 
@@ -58,25 +58,31 @@ describe('reducer', () => {
     // The first construction also completes the 'Lay the first stone' objective (+30 gold).
     expect(next.nations[0].resources.gold).toBe(player.resources.gold - cost.gold + 30)
   })
-  it('rejects attacks on provinces you are not at war with', () => {
+  it('rejects attacks on nations you are not at war with', () => {
     const s = newGame()
-    const player = playerNation(s)
     const border = ownedProvinces(s, 0).find((p) => p.neighbors.some((i) => s.provinces[i].ownerId !== null && s.provinces[i].ownerId !== 0))
     if (!border) return
     const target = border.neighbors.find((i) => s.provinces[i].ownerId !== null && s.provinces[i].ownerId !== 0)!
-    const next = reducer(s, { type: 'ATTACK', from: border.id, to: target, army: { ...border.garrison } })
-    expect(next).toBe(s)
-    void player
+    border.garrison.infantry = 20
+    const raised = reducer(s, { type: 'RAISE_ARMY', provinceId: border.id, units: { ...emptyArmy(), infantry: 20 } }) as GameState
+    const army = raised.armies[0]
+    expect(reducer(raised, { type: 'ARMY_ATTACK', armyId: army.id, toId: target })).toBe(raised)
   })
-  it('conquers an independent province with a strong army', () => {
+  it('raises an army from a garrison and conquers independent land with it', () => {
     const s = newGame()
     const player = playerNation(s)
     const cap = s.provinces[player.capitalId]
     cap.garrison.infantry = 30
+    const raised = reducer(s, { type: 'RAISE_ARMY', provinceId: cap.id, units: { ...emptyArmy(), infantry: 30 } }) as GameState
+    expect(raised.armies).toHaveLength(1)
+    expect(raised.provinces[cap.id].garrison.infantry).toBe(0)
+    const army = raised.armies[0]
+    expect(army.movement).toBeGreaterThan(0)
     const target = cap.neighbors.find((i) => s.provinces[i].ownerId === null)!
-    const next = reducer(s, { type: 'ATTACK', from: cap.id, to: target, army: { ...emptyArmy(), infantry: 30 } }) as GameState
+    const next = reducer(raised, { type: 'ARMY_ATTACK', armyId: army.id, toId: target }) as GameState
     expect(next.provinces[target].ownerId).toBe(0)
-    expect(next.provinces[target].lockedTurn).toBe(next.turn)
+    expect(next.armies[0].provinceId).toBe(target)
+    expect(next.armies[0].movement).toBe(0)
     expect(next.battles.at(-1)?.conquered).toBe(true)
   })
 })
@@ -109,6 +115,14 @@ describe('simulation', () => {
         expect(p.population).toBeGreaterThanOrEqual(300)
         expect(Object.values(p.garrison).every((v) => v >= 0)).toBe(true)
       }
+      for (const a of s.armies) {
+        expect(armySize(a.units)).toBeGreaterThan(0)
+        expect(Object.values(a.units).every((v) => v >= 0)).toBe(true)
+        expect(s.provinces[a.provinceId]).toBeDefined()
+        expect(s.nations[a.ownerId].alive).toBe(true)
+        expect(a.movement).toBeGreaterThanOrEqual(0)
+        expect(a.movement).toBeLessThanOrEqual(a.maxMovement)
+      }
     }
     const owned = s.provinces.filter((p) => p.ownerId !== null).length
     expect(owned).toBeGreaterThan(18)
@@ -118,7 +132,7 @@ describe('simulation', () => {
     console.log(`turn ${s.turn}\n` + summary.join('\n'))
     const wars = s.log.filter((e) => e.text.includes('declared war')).length
     const emptyAi = s.provinces.filter((p) => p.ownerId !== null && p.ownerId !== 0 && armySize(p.garrison) === 0).length
-    console.log('battles kept:', s.battles.length, 'war declarations in log:', wars, 'empty AI garrisons:', emptyAi)
+    console.log('battles kept:', s.battles.length, 'war declarations in log:', wars, 'empty AI garrisons:', emptyAi, 'field armies:', s.armies.length)
   })
 })
 
@@ -165,6 +179,57 @@ describe('objectives, edicts and migration', () => {
     expect(m.nations[0].stats.built).toBe(0)
     expect(m.objectives).toEqual([])
     expect(m.nations[0].color).toBe('#3d8bff')
+  })
+})
+
+describe('armies', () => {
+  it('moves across passable land, spending movement by terrain', async () => {
+    const { canMoveArmy, reachable } = await import('./armies')
+    const s = newGame()
+    const player = playerNation(s)
+    const cap = s.provinces[player.capitalId]
+    cap.garrison.infantry = 10
+    const g = reducer(s, { type: 'RAISE_ARMY', provinceId: cap.id, units: { ...emptyArmy(), infantry: 10 } }) as GameState
+    const army = g.armies[0]
+    const opts = reachable(g, army)
+    expect(opts.size).toBeGreaterThan(0)
+    for (const id of opts.keys()) expect(g.provinces[id].ownerId).toBe(0)
+    const dest = [...opts.keys()][0]
+    const moved = reducer(g, { type: 'MOVE_ARMY', armyId: army.id, destId: dest }) as GameState
+    expect(moved.armies[0].provinceId).toBe(dest)
+    expect(moved.armies[0].movement).toBeLessThan(army.movement)
+    const far = g.provinces.find((p) => p.ownerId !== 0)!
+    expect(canMoveArmy(g, army, far.id).ok).toBe(false)
+  })
+  it('merges, splits and disbands back into a garrison', async () => {
+    const s = newGame()
+    const player = playerNation(s)
+    const cap = s.provinces[player.capitalId]
+    cap.garrison.infantry = 10
+    let g = reducer(s, { type: 'RAISE_ARMY', provinceId: cap.id, units: { ...emptyArmy(), infantry: 10 } }) as GameState
+    const id = g.armies[0].id
+    g = reducer(g, { type: 'SPLIT_ARMY', armyId: id, units: { ...emptyArmy(), infantry: 4 } }) as GameState
+    expect(g.armies).toHaveLength(2)
+    expect(g.armies[0].units.infantry).toBe(6)
+    expect(g.armies[1].units.infantry).toBe(4)
+    g = reducer(g, { type: 'MERGE_ARMIES', intoId: g.armies[0].id, fromId: g.armies[1].id }) as GameState
+    expect(g.armies).toHaveLength(1)
+    expect(g.armies[0].units.infantry).toBe(10)
+    g = reducer(g, { type: 'DISBAND_ARMY', armyId: g.armies[0].id }) as GameState
+    expect(g.armies).toHaveLength(0)
+    expect(g.provinces[cap.id].garrison.infantry).toBe(10)
+  })
+  it('counts field armies in upkeep and national strength', async () => {
+    const s = newGame()
+    const player = playerNation(s)
+    const cap = s.provinces[player.capitalId]
+    const before = nationBudget(s, player).unitGold
+    const strengthBefore = armySize(nationArmy(s, 0))
+    cap.garrison.infantry += 10
+    const g = reducer(s, { type: 'RAISE_ARMY', provinceId: cap.id, units: { ...emptyArmy(), infantry: 10 } }) as GameState
+    const after = nationBudget(g, playerNation(g)).unitGold
+    expect(after).toBeGreaterThan(before)
+    expect(armySize(nationArmy(g, 0))).toBe(strengthBefore + 10)
   })
 })
 

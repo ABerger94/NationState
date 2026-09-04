@@ -178,7 +178,7 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
           </ol>
           <h3>Controls</h3>
           <ul className="help-list">
-            <li>Click a hex to select it. Click a red-ringed neighbour to line up an attack.</li>
+            <li>Click a hex to select it. Click one of your armies to command it, then click a blue tile to march or a red one to attack.</li>
             <li>Left-drag pans, right-drag rotates, scroll zooms. Two fingers on touch.</li>
             <li>Keys: Enter ends turn · 1-5 switch panels · H flies home · N next army · Tab hides the panel · Esc closes dialogs · ? opens this guide.</li>
           </ul>
@@ -188,8 +188,10 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
           <p>Population grows when fed and content. It is your tax base and your recruiting pool. Every unit levies 100 people. Food is eaten every turn; run out and famine kills people and stokes unrest. Farms raise food and capacity, granaries raise storage.</p>
           <h3>Gold and stability</h3>
           <p>Taxes come from population, markets and the tax rate. Higher taxes raise unrest; unrest, war weariness and heavy taxes lower stability; stability scales income, growth and morale. Temples, luxuries and the Tolerance edict calm the realm.</p>
-          <h3>Armies and battle</h3>
-          <p>Militia are cheap defenders. Infantry hold lines. Archers volley first and love forests. Cavalry dominate plains and fail in hills. Siege engines breach walls. Battles run in rounds; a side routs when morale drops below 30. Read the odds before you attack, and leave a garrison behind.</p>
+          <h3>Garrisons and armies</h3>
+          <p>Troops you recruit join a province's <b>garrison</b>, which defends that province and never leaves it. To attack you must <b>raise an army</b> from a garrison. Field armies march across the map on movement points, spending more in forest, hills and mountains, and they can only pass through your own and allied land. Merge them, split them, or stand them down back into a garrison.</p>
+          <h3>Battle</h3>
+          <p>Militia are cheap defenders. Infantry hold lines. Archers volley first and love forests. Cavalry dominate plains and fail in hills. Siege engines breach walls. Battles run in rounds; a side routs when morale drops below 30. Defenders fight as the garrison plus every friendly army standing there. Read the odds before you attack.</p>
           <h3>War and peace</h3>
           <p>Wars need a shared border and a declaration. Declaring war angers everyone and drags the target's allies in. Enemies accept peace when they are losing or weary. Gifts raise relations; alliances need relations of 60 or more.</p>
         </section>

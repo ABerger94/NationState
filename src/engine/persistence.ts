@@ -15,6 +15,7 @@ export function saveGame(state: GameState | null): void {
 export function migrate(raw: GameState): GameState {
   const s = raw
   s.objectives ??= []
+  s.armies ??= []
   for (const n of s.nations) {
     n.policies ??= defaultPolicies()
     n.stats ??= emptyStats()
@@ -26,7 +27,7 @@ export function migrate(raw: GameState): GameState {
   }
   for (const p of s.provinces) p.resource ??= null
   for (const e of s.log) e.important ??= true
-  s.version = 2
+  s.version = 3
   return s
 }
 
@@ -36,7 +37,7 @@ export function loadGame(): GameState | null {
     if (!raw) return null
     const parsed = JSON.parse(raw) as GameState
     if (!parsed || !Array.isArray(parsed.provinces) || !Array.isArray(parsed.nations)) return null
-    if (parsed.version !== 1 && parsed.version !== 2) return null
+    if (![1, 2, 3].includes(parsed.version)) return null
     return migrate(parsed)
   } catch {
     return null

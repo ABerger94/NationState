@@ -1,10 +1,11 @@
 import type { BuildingKey, GameState, Nation, Province, TechKey, UnitKey } from './types'
 import { BUILDINGS, PERSONALITIES, TECHS, TECH_ORDER, UNITS } from './data'
-import { armyPower, armySize, bordersNation, hasTech, hexDistance, log, nationArmy, ownedProvinces, totalPopulation } from './helpers'
-import { buildingCost, canAfford, nationBudget, pay, transferCost, unitCost } from './economy'
+import { armyPower, armySize, bordersNation, emptyArmy, hasTech, hexDistance, log, nationArmy, ownedProvinces, totalPopulation } from './helpers'
+import { armiesOf, defendersAt, disbandIntoGarrison, moveArmy, raiseArmy, reachable } from './armies'
+import { buildingCost, canAfford, nationBudget, pay, unitCost } from './economy'
 import { aiAcceptsAlliance, aiAcceptsPeace, atWar, declareWar, formAlliance, makePeace } from './diplomacy'
-import { attackPower, defensePower, performAttack } from './military'
-import { nextRand, pick, shuffle } from './rng'
+import { attackPower, canArmyAttack, defensePower, performArmyAttack } from './military'
+import { nextRand, pick } from './rng'
 
 export function availableTechs(n: Nation): TechKey[] {
   return TECH_ORDER.filter((t) => !n.techs.includes(t) && (!TECHS[t].requires || n.techs.includes(TECHS[t].requires!)))
@@ -21,16 +22,6 @@ function chooseResearch(n: Nation) {
     return ma - mb || TECHS[a].cost - TECHS[b].cost
   })
   n.research = sorted[0]
-}
-
-/** Remove `keep` units from a force so a garrison always stays behind, cheapest units first. */
-function leaveHomeGuard(force: { [K in UnitKey]: number }, keep: number) {
-  const order: UnitKey[] = ['militia', 'archers', 'infantry', 'cavalry', 'siege']
-  let left = keep
-  for (const k of order) {
-    while (left > 0 && force[k] > 0) { force[k] -= 1; left -= 1 }
-  }
-  return force
 }
 
 function borderProvinces(state: GameState, n: Nation): Province[] {
@@ -168,52 +159,88 @@ function aiDiplomacy(state: GameState, n: Nation) {
   }
 }
 
-function aiRedeploy(state: GameState, n: Nation) {
-  const provs = ownedProvinces(state, n.id)
-  const border = borderProvinces(state, n)
-  if (!border.length) return
-  const interior = provs.filter((p) => !border.includes(p) && p.lockedTurn !== state.turn && armySize(p.garrison) > 1)
-  for (const p of interior) {
-    const dest = border.reduce((b, q) => (threatAt(state, n, q) - armyPower(q.garrison) > threatAt(state, n, b) - armyPower(b.garrison) ? q : b))
-    const moving = leaveHomeGuard({ ...p.garrison }, 1)
-    const units = armySize(moving)
-    if (units === 0) continue
-    const cost = transferCost(n, p, dest, units, hexDistance(p, dest))
-    if (n.resources.gold < cost) continue
-    n.resources.gold -= cost
-    for (const k of Object.keys(moving) as UnitKey[]) {
-      p.garrison[k] -= moving[k]
-      dest.garrison[k] += moving[k]
+/** Troops a province should keep at home no matter what. */
+function homeGuard(state: GameState, n: Nation, p: Province): number {
+  if (p.isCapital) return 3
+  const frontier = p.neighbors.some((i) => state.provinces[i].ownerId !== n.id)
+  return frontier ? 2 : 1
+}
+
+/** Provinces this nation may attack: independent land, or land of a nation it is at war with. */
+function targetProvinces(state: GameState, n: Nation): Province[] {
+  return state.provinces.filter((p) => {
+    if (p.ownerId === n.id) return false
+    if (p.ownerId !== null && !atWar(n, state.nations[p.ownerId])) return false
+    return p.neighbors.some((i) => state.provinces[i].ownerId === n.id)
+      || armiesOf(state, n.id).some((a) => state.provinces[a.provinceId].neighbors.includes(p.id))
+  })
+}
+
+/** How badly this nation wants a province, weighing its defence against its worth. */
+function targetScore(state: GameState, n: Nation, p: Province, force: ReturnType<typeof emptyArmy>): number {
+  const owner = p.ownerId === null ? null : state.nations[p.ownerId]
+  const mine = attackPower(force, n, p.terrain, 2, state)
+  const theirs = defensePower(defendersAt(state, p.id).units, owner, p, force.siege)
+  const ratio = theirs <= 0 ? 99 : mine / theirs
+  if (ratio < 1.25) return -1
+  const worth = p.population / 4000 + (p.resource ? 2 : 0) + (p.isCapital ? 4 : 0) + (p.ownerId === null ? 1 : 2)
+  return worth + Math.min(6, ratio)
+}
+
+function aiRaiseArmies(state: GameState, n: Nation) {
+  const pers = PERSONALITIES[n.personality]
+  const wantOffence = n.wars.length > 0 || state.provinces.some((p) => p.ownerId === null && p.neighbors.some((i) => state.provinces[i].ownerId === n.id))
+  if (!wantOffence) return
+  const maxArmies = n.personality === 'aggressive' ? 4 : 3
+  for (const p of ownedProvinces(state, n.id)) {
+    if (armiesOf(state, n.id).length >= maxArmies) break
+    const guard = homeGuard(state, n, p)
+    const spare = { ...p.garrison }
+    let left = guard
+    for (const k of ['militia', 'archers', 'infantry', 'cavalry', 'siege'] as UnitKey[]) {
+      while (left > 0 && spare[k] > 0) { spare[k] -= 1; left -= 1 }
     }
+    const size = armySize(spare)
+    if (size < 3) continue
+    if (nextRand(state) > pers.aggression + 0.35) continue
+    raiseArmy(state, n.id, p.id, spare)
   }
 }
 
-function aiAttack(state: GameState, n: Nation) {
+function aiCommandArmies(state: GameState, n: Nation) {
   const pers = PERSONALITIES[n.personality]
-  let attacks = 0
-  const maxAttacks = n.personality === 'aggressive' ? 3 : 2
-  const sources = shuffle(state, borderProvinces(state, n))
-  for (const from of sources) {
-    if (attacks >= maxAttacks) break
-    if (from.lockedTurn === state.turn) continue
-    const force = leaveHomeGuard({ ...from.garrison }, from.isCapital ? 2 : 1)
-    if (armySize(force) < 2) continue
-    const targets = from.neighbors.map((i) => state.provinces[i]).filter((t) =>
-      t.ownerId !== n.id && (t.ownerId === null || atWar(n, state.nations[t.ownerId])),
-    )
-    let best: { p: Province; ratio: number } | null = null
-    for (const t of targets) {
-      const owner = t.ownerId === null ? null : state.nations[t.ownerId]
-      const mine = attackPower(force, n, t.terrain, 2, state)
-      const theirs = defensePower(t.garrison, owner, t, force.siege)
-      const ratio = theirs <= 0 ? 99 : mine / theirs
-      const needed = t.ownerId === null ? Math.max(1.2, pers.attackRatio - 0.3) : pers.attackRatio
-      if (ratio >= needed && (!best || ratio > best.ratio)) best = { p: t, ratio }
+  for (const army of armiesOf(state, n.id)) {
+    const targets = targetProvinces(state, n)
+    if (!targets.length) {
+      if (n.wars.length === 0 && state.provinces[army.provinceId].ownerId === n.id) disbandIntoGarrison(state, army.id)
+      continue
     }
-    if (best) {
-      performAttack(state, n.id, from.id, best.p.id, force)
-      attacks++
+    // Attack anything adjacent that is worth taking.
+    const adjacent = state.provinces[army.provinceId].neighbors
+      .map((i) => state.provinces[i])
+      .filter((p) => targets.includes(p) && canArmyAttack(state, army, p.id).ok)
+    let best: { p: Province; score: number } | null = null
+    for (const p of adjacent) {
+      const score = targetScore(state, n, p, army.units)
+      if (score > 0 && (!best || score > best.score)) best = { p, score }
     }
+    if (best && nextRand(state) < 0.5 + pers.aggression * 0.5) {
+      performArmyAttack(state, army.id, best.p.id)
+      continue
+    }
+    // Otherwise march toward the most attractive target we can still reach.
+    const goal = targets
+      .map((p) => ({ p, score: targetScore(state, n, p, army.units) - hexDistance(state.provinces[army.provinceId], p) * 0.5 }))
+      .sort((a, b) => b.score - a.score)[0]
+    if (!goal) continue
+    const options = reachable(state, army)
+    let step: { id: number; dist: number } | null = null
+    const here = hexDistance(state.provinces[army.provinceId], goal.p)
+    for (const id of options.keys()) {
+      const dist = hexDistance(state.provinces[id], goal.p)
+      if (dist < here && (!step || dist < step.dist)) step = { id, dist }
+    }
+    if (step) moveArmy(state, army.id, step.id)
   }
 }
 
@@ -235,7 +262,7 @@ export function runAI(state: GameState, n: Nation): void {
   aiBuild(state, n)
   aiRecruit(state, n)
   aiDiplomacy(state, n)
-  aiRedeploy(state, n)
-  aiAttack(state, n)
+  aiRaiseArmies(state, n)
+  aiCommandArmies(state, n)
   if (!hasTech(n, 'agriculture') && n.research === null) n.research = 'agriculture'
 }

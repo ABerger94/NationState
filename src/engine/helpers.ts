@@ -83,8 +83,10 @@ export function totalPopulation(state: GameState, nationId: number): number {
   return ownedProvinces(state, nationId).reduce((s, p) => s + p.population, 0)
 }
 
+/** Every unit the nation fields: province garrisons plus field armies. */
 export function nationArmy(state: GameState, nationId: number): Army {
-  return ownedProvinces(state, nationId).reduce((acc, p) => addArmy(acc, p.garrison), emptyArmy())
+  const fromProvinces = ownedProvinces(state, nationId).reduce((acc, p) => addArmy(acc, p.garrison), emptyArmy())
+  return state.armies.filter((a) => a.ownerId === nationId).reduce((acc, a) => addArmy(acc, a.units), fromProvinces)
 }
 
 export function ownerName(state: GameState, ownerId: number | null): string {

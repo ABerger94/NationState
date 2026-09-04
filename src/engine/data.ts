@@ -20,6 +20,11 @@ export const TERRAINS: Record<Terrain, TerrainDef> = {
   coast: { name: 'Coast', food: 2.4, wood: 0.6, iron: 0.2, gold: 0.6, capacity: 25000, defense: 1.0, cavalry: 1.1, color: '#5b9bb5', weight: 14 },
 }
 
+export const TERRAIN_MOVE_COST: Record<Terrain, number> = { plains: 1, coast: 1, forest: 2, hills: 2, mountains: 3 }
+export const ARMY_BASE_MOVEMENT = 4
+export const ARMY_MIN_MOVEMENT = 2
+export const ARMY_MAX_MOVEMENT = 6
+
 export interface BuildingDef { name: string; description: string; cost: Resources; max: number }
 export const BUILDINGS: Record<BuildingKey, BuildingDef> = {
   farm: { name: 'Farm', description: '+30% food and +25% population capacity per level.', cost: { gold: 60, food: 0, wood: 20, iron: 0 }, max: 5 },

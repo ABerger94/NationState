@@ -4,6 +4,8 @@ import { armyPower, armySize, ownedProvinces, playerNation } from './engine/help
 import { attackPower, defensePower } from './engine/military'
 import { atWar } from './engine/diplomacy'
 import { bestBuildAcrossRealm, describeGain } from './engine/yields'
+import { armiesOf } from './engine/armies'
+import { canArmyAttack } from './engine/military'
 import { BUILDINGS } from './engine/data'
 import { buildingCost } from './engine/economy'
 
@@ -42,7 +44,6 @@ export function getAdvice(state: GameState): Advice[] {
 
   let worstThreat: { p: typeof provs[number]; enemy: string; ratio: number } | null = null
   let undefended: typeof provs[number] | null = null
-  let expansion: { from: typeof provs[number]; to: string; ratio: number } | null = null
   for (const p of provs) {
     const own = defensePower(p.garrison, player, p, 0)
     for (const i of p.neighbors) {
@@ -55,17 +56,24 @@ export function getAdvice(state: GameState): Advice[] {
         if (ratio > 1.1 && (!worstThreat || ratio > worstThreat.ratio)) worstThreat = { p, enemy: enemy.name, ratio }
       }
       if (armySize(p.garrison) === 0 && enemy && !undefended) undefended = p
-      if (q.ownerId === null && p.lockedTurn !== state.turn) {
-        const mine = attackPower({ ...p.garrison, militia: 0 }, player, q.terrain, 2, state)
-        const theirs = defensePower(q.garrison, null, q, p.garrison.siege)
-        const ratio = theirs > 0 ? mine / theirs : 99
-        if (ratio >= 1.7 && (!expansion || ratio > expansion.ratio)) expansion = { from: p, to: q.name, ratio }
-      }
     }
   }
+
+  const armies = armiesOf(state, player.id)
+  const idle = armies.filter((a) => a.movement > 0)
+  const striker = idle.find((a) => state.provinces[a.provinceId].neighbors.some((i) => canArmyAttack(state, a, i).ok))
+  if (striker) {
+    const target = state.provinces[striker.provinceId].neighbors.find((i) => canArmyAttack(state, striker, i).ok)!
+    out.push({ id: 'strike', level: 'tip', text: `${striker.name} can attack ${state.provinces[target].name} this turn.`, provinceId: striker.provinceId, tab: 'province' })
+  } else if (idle.length) {
+    out.push({ id: 'idle-army', level: 'info', text: `${idle.length} of your armies still have movement left this turn. Press N to cycle them.`, tab: 'military' })
+  } else if (!armies.length) {
+    const musterable = provs.find((p) => armySize(p.garrison) >= 4 && p.neighbors.some((i) => state.provinces[i].ownerId !== player.id))
+    if (musterable) out.push({ id: 'muster', level: 'tip', text: `You have no field army. Raise one in ${musterable.name} to expand: garrisons cannot attack.`, provinceId: musterable.id, tab: 'province' })
+  }
+
   if (worstThreat) out.push({ id: 'threat', level: 'danger', text: `${worstThreat.p.name} is outmatched by ${worstThreat.enemy} forces next door. Reinforce it or build walls.`, provinceId: worstThreat.p.id, tab: 'province' })
   if (undefended) out.push({ id: 'undefended', level: 'warn', text: `${undefended.name} has no garrison and borders a foreign nation.`, provinceId: undefended.id, tab: 'province' })
-  if (expansion) out.push({ id: 'expand', level: 'tip', text: `The army in ${expansion.from.name} can take independent ${expansion.to} with good odds.`, provinceId: expansion.from.id, tab: 'province' })
 
   const myPower = armyPower(provs.reduce((a, p) => { for (const k of Object.keys(a) as Array<keyof typeof a>) a[k] += p.garrison[k]; return a }, { militia: 0, infantry: 0, archers: 0, cavalry: 0, siege: 0 }))
   const bully = state.nations.find((n) => n.alive && !n.isPlayer && !atWar(player, n) && (player.relations[n.id] ?? 0) < -30 && armyPower(ownedProvinces(state, n.id).reduce((a, p) => { for (const k of Object.keys(a) as Array<keyof typeof a>) a[k] += p.garrison[k]; return a }, { militia: 0, infantry: 0, archers: 0, cavalry: 0, siege: 0 })) > myPower * 1.5)

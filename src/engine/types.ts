@@ -19,6 +19,18 @@ export interface NationStats { built: number; recruited: number; battlesWon: num
 export interface CompletedObjective { id: string; turn: number }
 
 export type Army = Record<UnitKey, number>
+
+/** A mobile stack of troops standing in a province. Garrisons defend; field armies attack. */
+export interface FieldArmy {
+  id: number
+  name: string
+  ownerId: number
+  provinceId: number
+  units: Army
+  movement: number
+  maxMovement: number
+  morale: number
+}
 export type Resources = Record<Resource, number>
 
 export interface Province {
@@ -122,6 +134,7 @@ export interface GameState {
   rows: number
   provinces: Province[]
   nations: Nation[]
+  armies: FieldArmy[]
   log: LogEntry[]
   battles: BattleReport[]
   nextId: number

@@ -1,13 +1,14 @@
 import type { Army, BuildingKey, Difficulty, EconomyPolicy, GameState, MilitaryPolicy, PolicyCategory, SocietyPolicy, TechKey, UnitKey } from './types'
 import { POLICY_CHANGE_COST, POLICY_COOLDOWN, TECHS, TRADE_PRICES, UNITS } from './data'
 import { checkObjectives } from './objectives'
-import { armyFits, armySize, cloneState, hexDistance, log, playerNation, subArmy, addArmy } from './helpers'
-import { buildingCost, canBuild, canRecruit, pay, transferCost, unitCost } from './economy'
+import { cloneState, log, playerNation } from './helpers'
+import { buildingCost, canBuild, canRecruit, pay, unitCost } from './economy'
 import { aiAcceptsAlliance, aiAcceptsPeace, atWar, breakAlliance, changeRelation, declareWar, formAlliance, makePeace } from './diplomacy'
-import { performAttack } from './military'
+import { canArmyAttack, performArmyAttack } from './military'
 import { applyEventChoice } from './events'
 import { endTurn } from './turn'
 import { createGame } from './world'
+import { armiesOf, armyById, disbandIntoGarrison, mergeArmies, moveArmy, raiseArmy, splitArmy } from './armies'
 
 export type Action =
   | { type: 'NEW_GAME'; seed: number; playerName: string; difficulty: Difficulty }
@@ -15,8 +16,12 @@ export type Action =
   | { type: 'BUILD'; provinceId: number; building: BuildingKey }
   | { type: 'RECRUIT'; provinceId: number; unit: UnitKey; count: number }
   | { type: 'DISBAND'; provinceId: number; unit: UnitKey; count: number }
-  | { type: 'TRANSFER'; from: number; to: number; army: Army }
-  | { type: 'ATTACK'; from: number; to: number; army: Army }
+  | { type: 'RAISE_ARMY'; provinceId: number; units: Army }
+  | { type: 'MOVE_ARMY'; armyId: number; destId: number }
+  | { type: 'ARMY_ATTACK'; armyId: number; toId: number }
+  | { type: 'DISBAND_ARMY'; armyId: number }
+  | { type: 'MERGE_ARMIES'; intoId: number; fromId: number }
+  | { type: 'SPLIT_ARMY'; armyId: number; units: Army }
   | { type: 'SET_TAX'; rate: number }
   | { type: 'SET_RESEARCH'; tech: TechKey | null }
   | { type: 'DECLARE_WAR'; target: number }
@@ -31,30 +36,19 @@ export type Action =
   | { type: 'END_TURN' }
   | { type: 'QUIT' }
 
-/** Which neighbours of a player province can currently be attacked from it. */
-export function attackTargets(state: GameState, fromId: number): number[] {
-  const from = state.provinces[fromId]
-  const player = playerNation(state)
-  if (from.ownerId !== player.id || from.lockedTurn === state.turn || armySize(from.garrison) === 0) return []
-  return from.neighbors.filter((i) => {
-    const t = state.provinces[i]
-    return t.ownerId === null || (t.ownerId !== player.id && atWar(player, state.nations[t.ownerId]))
-  })
+/** Provinces the given army may attack this turn. */
+export function armyAttackTargets(state: GameState, armyId: number): number[] {
+  const army = armyById(state, armyId)
+  if (!army) return []
+  return state.provinces[army.provinceId].neighbors.filter((i) => canArmyAttack(state, army, i).ok)
 }
 
-export function canTransfer(state: GameState, fromId: number, toId: number, army: Army): { ok: boolean; reason: string; cost: number } {
+/** Every province any of the player's armies could attack this turn. */
+export function allAttackTargets(state: GameState): number[] {
   const player = playerNation(state)
-  const from = state.provinces[fromId]
-  const to = state.provinces[toId]
-  const units = armySize(army)
-  const cost = transferCost(player, from, to, units, hexDistance(from, to))
-  if (from.ownerId !== player.id || to.ownerId !== player.id) return { ok: false, reason: 'Both provinces must be yours', cost }
-  if (fromId === toId) return { ok: false, reason: 'Choose a different province', cost }
-  if (from.lockedTurn === state.turn) return { ok: false, reason: 'These troops have already acted this turn', cost }
-  if (units === 0) return { ok: false, reason: 'Select troops to move', cost }
-  if (!armyFits(from.garrison, army)) return { ok: false, reason: 'Not enough troops', cost }
-  if (player.resources.gold < cost) return { ok: false, reason: `Transfer costs ${cost} gold`, cost }
-  return { ok: true, reason: '', cost }
+  const out = new Set<number>()
+  for (const a of armiesOf(state, player.id)) for (const i of armyAttackTargets(state, a.id)) out.add(i)
+  return [...out]
 }
 
 export function canChangePolicy(state: GameState, category: PolicyCategory): { ok: boolean; reason: string; cost: number } {
@@ -109,21 +103,41 @@ function applyAction(state: GameState, action: Action): GameState | null {
       p.population += Math.round(UNITS[action.unit].men * action.count * 0.8)
       return s
     }
-    case 'TRANSFER': {
-      const check = canTransfer(s, action.from, action.to, action.army)
-      if (!check.ok) return state
-      player.resources.gold -= check.cost
-      s.provinces[action.from].garrison = subArmy(s.provinces[action.from].garrison, action.army)
-      s.provinces[action.to].garrison = addArmy(s.provinces[action.to].garrison, action.army)
+    case 'RAISE_ARMY': {
+      const army = raiseArmy(s, player.id, action.provinceId, action.units)
+      if (!army) return state
+      log(s, 'info', `${army.name} musters in ${s.provinces[action.provinceId].name}.`, false)
       return s
     }
-    case 'ATTACK': {
-      if (!attackTargets(s, action.from).includes(action.to)) return state
-      const from = s.provinces[action.from]
-      if (armySize(action.army) === 0 || !armyFits(from.garrison, action.army)) return state
+    case 'MOVE_ARMY': {
+      if (!moveArmy(s, action.armyId, action.destId)) return state
+      return s
+    }
+    case 'ARMY_ATTACK': {
+      const army = armyById(s, action.armyId)
+      if (!army || army.ownerId !== player.id) return state
+      if (!canArmyAttack(s, army, action.toId).ok) return state
       if (s.pendingEvent) return state
       s.lastTurnBattles = []
-      performAttack(s, player.id, action.from, action.to, action.army)
+      performArmyAttack(s, action.armyId, action.toId)
+      return s
+    }
+    case 'DISBAND_ARMY': {
+      const army = armyById(s, action.armyId)
+      if (!army || army.ownerId !== player.id) return state
+      if (!disbandIntoGarrison(s, action.armyId)) return state
+      return s
+    }
+    case 'MERGE_ARMIES': {
+      const into = armyById(s, action.intoId)
+      if (!into || into.ownerId !== player.id) return state
+      if (!mergeArmies(s, action.intoId, action.fromId)) return state
+      return s
+    }
+    case 'SPLIT_ARMY': {
+      const army = armyById(s, action.armyId)
+      if (!army || army.ownerId !== player.id) return state
+      if (!splitArmy(s, action.armyId, action.units)) return state
       return s
     }
     case 'TRADE': {
